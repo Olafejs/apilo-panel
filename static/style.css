@@ -607,6 +607,32 @@ tbody tr.dirty {
   padding: 1px 6px;
 }
 
+.api-lock-note {
+  margin: 0 0 8px 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #f8f4ec;
+  color: var(--text);
+}
+
+.field-help {
+  display: block;
+  margin-top: 4px;
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.35;
+}
+
+.field-help code {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1px 5px;
+  font-size: 0.78rem;
+}
+
 .btn.small {
   height: 32px;
   padding: 6px 14px;

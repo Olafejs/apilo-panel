@@ -14,7 +14,21 @@ All important changes should be tracked here together with the application versi
 
 ### Planned
 
-- Additional validation coverage for SMTP fields and API URL templates.
+- Additional validation coverage for SMTP fields.
+
+## [1.0.9] - 2026-02-27
+
+### Changed
+
+- Removed the `Szablon linku do zamówienia` option from Settings; order links now consistently use the built-in default based on current API base URL.
+- Added contextual help for `ID cennika Allegro`, including where the value comes from in Apilo and which endpoint uses it.
+- Updated README with a dedicated explanation of Allegro price list ID source and usage.
+
+### Fixed
+
+- Suggestions now use the selected sales window (`30/60/120/180/365`) instead of always dividing by 30 days.
+- Suggestions include a yearly-sales fallback when selected-window sales are zero, reducing underestimation for seasonal/intermittent products.
+- API settings form is now hidden by default when configuration and tokens are valid; only status indicators are shown (with optional explicit edit mode).
 
 ## [1.0.8] - 2026-02-27
 

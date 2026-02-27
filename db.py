@@ -318,6 +318,7 @@ def get_products(
     offset=0,
     lead_time_days=14,
     safety_pct=20,
+    suggest_days=30,
 ):
     allowed = {
         "name": "name",
@@ -332,74 +333,66 @@ def get_products(
         order_clause = f"{sort_col} COLLATE NOCASE {order_dir}"
     else:
         order_clause = f"{sort_col} {order_dir}"
-    conn = get_db(db_path)
+    try:
+        suggest_days = int(suggest_days)
+    except (TypeError, ValueError):
+        suggest_days = 30
+    if suggest_days < 1:
+        suggest_days = 30
+
+    base_query = """
+        SELECT
+            p.*,
+            sc.quantity_30d,
+            scy.quantity_year,
+            scy.orders_year,
+            CASE
+                WHEN sc.quantity_30d IS NULL AND COALESCE(scy.quantity_year, 0) = 0 THEN NULL
+                ELSE CAST(
+                    (
+                        CASE
+                            WHEN COALESCE(sc.quantity_30d, 0) = 0
+                                AND COALESCE(scy.quantity_year, 0) > 0
+                                THEN COALESCE(scy.quantity_year, 0) / 365.0
+                            ELSE COALESCE(sc.quantity_30d, 0) / CAST(? AS REAL)
+                        END
+                    ) * ? * (1 + ? / 100.0) + 0.9999
+                    AS INTEGER
+                )
+            END AS suggested_qty
+        FROM products p
+        LEFT JOIN sales_cache sc ON sc.ean = p.ean
+        LEFT JOIN sales_cache_year scy ON scy.ean = p.ean
+    """
+
+    if search:
+        where_clause = "WHERE p.sku LIKE ? OR p.name LIKE ? OR p.original_code LIKE ? OR p.ean LIKE ?"
+    else:
+        where_clause = ""
+
+    query = f"""
+        SELECT
+            base.*,
+            CASE
+                WHEN base.suggested_qty IS NULL THEN NULL
+                ELSE base.suggested_qty - base.quantity
+            END AS shortage_qty
+        FROM (
+            {base_query}
+            {where_clause}
+        ) AS base
+        ORDER BY {order_clause}
+        LIMIT ? OFFSET ?
+    """
+
+    params = [suggest_days, lead_time_days, safety_pct]
     if search:
         like = f"%{search}%"
-        rows = conn.execute(
-            """
-            SELECT
-                p.*,
-                sc.quantity_30d,
-                CASE
-                    WHEN sc.quantity_30d IS NULL THEN NULL
-                    ELSE CAST(
-                        (sc.quantity_30d / 30.0) * ? * (1 + ? / 100.0) + 0.9999
-                        AS INTEGER
-                    )
-                END AS suggested_qty,
-                CASE
-                    WHEN sc.quantity_30d IS NULL THEN NULL
-                    ELSE CAST(
-                        (sc.quantity_30d / 30.0) * ? * (1 + ? / 100.0) + 0.9999
-                        AS INTEGER
-                    ) - p.quantity
-                END AS shortage_qty
-            FROM products p
-            LEFT JOIN sales_cache sc ON sc.ean = p.ean
-            WHERE p.sku LIKE ? OR p.name LIKE ? OR p.original_code LIKE ? OR p.ean LIKE ?
-            ORDER BY {}
-            LIMIT ? OFFSET ?
-            """.format(order_clause),
-            (
-                lead_time_days,
-                safety_pct,
-                lead_time_days,
-                safety_pct,
-                like,
-                like,
-                like,
-                like,
-                limit,
-                offset,
-            ),
-        ).fetchall()
-    else:
-        rows = conn.execute(
-            """
-            SELECT
-                p.*,
-                sc.quantity_30d,
-                CASE
-                    WHEN sc.quantity_30d IS NULL THEN NULL
-                    ELSE CAST(
-                        (sc.quantity_30d / 30.0) * ? * (1 + ? / 100.0) + 0.9999
-                        AS INTEGER
-                    )
-                END AS suggested_qty,
-                CASE
-                    WHEN sc.quantity_30d IS NULL THEN NULL
-                    ELSE CAST(
-                        (sc.quantity_30d / 30.0) * ? * (1 + ? / 100.0) + 0.9999
-                        AS INTEGER
-                    ) - p.quantity
-                END AS shortage_qty
-            FROM products p
-            LEFT JOIN sales_cache sc ON sc.ean = p.ean
-            ORDER BY {}
-            LIMIT ? OFFSET ?
-            """.format(order_clause),
-            (lead_time_days, safety_pct, lead_time_days, safety_pct, limit, offset),
-        ).fetchall()
+        params.extend([like, like, like, like])
+    params.extend([limit, offset])
+
+    conn = get_db(db_path)
+    rows = conn.execute(query, tuple(params)).fetchall()
     conn.close()
     return rows
 

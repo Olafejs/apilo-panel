@@ -145,6 +145,14 @@ Każde konto ma własny adres (subdomenę), np. `twoje-konto.apilo.com`.
 
 4. Pole `Ważność do` z Apilo jest informacyjne (pokazuje termin ważności kodu/tokenu) i nie wymaga osobnego pola w panelu.
 
+## ID cennika Allegro - co to jest i skąd je wziąć
+- `ID cennika Allegro` to unikalny identyfikator cennika w Apilo.
+- Panel używa go do pobrania cen Allegro przez endpoint:
+  `GET /rest/api/warehouse/price-calculated/?price=<ID>`.
+- Źródło tego ID:
+  - lista cenników w Apilo,
+  - albo API `GET /rest/api/warehouse/price/` (pole z identyfikatorem cennika).
+
 ## Deployment (opcjonalnie)
 Repo zawiera szablon usługi `systemd`: `apilo-panel.service`.
 

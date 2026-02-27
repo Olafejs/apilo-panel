@@ -66,55 +66,66 @@
             </div>
           </div>
 
-          <div class="api-help">
-            <p><strong>Skąd wziąć dane API Apilo:</strong></p>
-            <ol>
-              <li>Wejdź na adres swojego konta: <code>https://twoje-konto.apilo.com/admin/rest-api/</code>.</li>
-              <li>W zakładce <strong>Klucze API Apilo</strong> kliknij <strong>Nowa aplikacja REST API</strong>.</li>
-              <li>Przepisz do panelu: Adres API, Client ID, Client Secret, Kod autoryzacji.</li>
-            </ol>
-          </div>
+          {% if show_api_form %}
+            <div class="api-help">
+              <p><strong>Skąd wziąć dane API Apilo:</strong></p>
+              <ol>
+                <li>Wejdź na adres swojego konta: <code>https://twoje-konto.apilo.com/admin/rest-api/</code>.</li>
+                <li>W zakładce <strong>Klucze API Apilo</strong> kliknij <strong>Nowa aplikacja REST API</strong>.</li>
+                <li>Przepisz do panelu: Adres API, Client ID, Client Secret, Kod autoryzacji.</li>
+              </ol>
+            </div>
 
-          <form method="post" class="stack">
-            <input type="hidden" name="action" value="api">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <div class="form-grid">
-              <label class="full">
-                Adres API (endpoint)
-                <input type="text" name="apilo_base_url" placeholder="https://twoje-konto.apilo.com" value="{{ api.get('apilo_base_url', '') }}">
-              </label>
-              <label>
-                Client ID
-                <input type="text" name="apilo_client_id" value="{{ api.get('apilo_client_id', '') }}">
-              </label>
-              <label>
-                Client Secret
-                <input type="password" name="apilo_client_secret" value="{{ api.get('apilo_client_secret', '') }}">
-              </label>
-              <label>
-                Kod autoryzacji
-                <input type="text" name="apilo_auth_code" placeholder="Wklej kod autoryzacji z Apilo">
-              </label>
-              <label class="full">
-                Szablon linku do zamówienia
-                <input type="text" name="apilo_order_url_template" placeholder="{base}/order/order/detail/{id}/" value="{{ api.get('apilo_order_url_template', '') }}">
-              </label>
+            <form method="post" class="stack">
+              <input type="hidden" name="action" value="api">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <div class="form-grid">
+                <label class="full">
+                  Adres API (endpoint)
+                  <input type="text" name="apilo_base_url" placeholder="https://twoje-konto.apilo.com" value="{{ api.get('apilo_base_url', '') }}">
+                </label>
+                <label>
+                  Client ID
+                  <input type="text" name="apilo_client_id" value="{{ api.get('apilo_client_id', '') }}">
+                </label>
+                <label>
+                  Client Secret
+                  <input type="password" name="apilo_client_secret" value="{{ api.get('apilo_client_secret', '') }}">
+                </label>
+                <label>
+                  Kod autoryzacji
+                  <input type="text" name="apilo_auth_code" placeholder="Wklej kod autoryzacji z Apilo">
+                </label>
+              </div>
+              <div class="action-row">
+                <button class="btn primary" type="submit">Zapisz dane i pobierz token</button>
+                {% if api_locked and api_edit_mode %}
+                  <a class="btn small outline" href="{{ url_for('settings') }}">Ukryj edycję API</a>
+                {% endif %}
+              </div>
+            </form>
+
+            <form method="post" class="stack api-test-form">
+              <input type="hidden" name="action" value="api_test">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <div class="action-row">
+                <button class="btn" type="submit">Testuj połączenie</button>
+                {% if api_status.test_message %}
+                  <div class="hint">Ostatni test: {{ api_status.test_at }} - {{ api_status.test_message }}</div>
+                {% endif %}
+              </div>
+            </form>
+          {% else %}
+            <div class="api-lock-note">
+              Dane API Apilo są poprawne. Edycja pól jest ukryta, aby ograniczyć przypadkowe zmiany.
             </div>
             <div class="action-row">
-              <button class="btn primary" type="submit">Zapisz dane i pobierz token</button>
-            </div>
-          </form>
-
-          <form method="post" class="stack api-test-form">
-            <input type="hidden" name="action" value="api_test">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <div class="action-row">
-              <button class="btn" type="submit">Testuj połączenie</button>
+              <a class="btn small outline" href="{{ url_for('settings', edit_api=1) }}">Edytuj dane API</a>
               {% if api_status.test_message %}
                 <div class="hint">Ostatni test: {{ api_status.test_at }} - {{ api_status.test_message }}</div>
               {% endif %}
             </div>
-          </form>
+          {% endif %}
         </div>
 
         <div class="card">
@@ -131,6 +142,11 @@
               <label>
                 ID cennika Allegro
                 <input type="number" min="1" step="1" name="allegro_price_list_id" placeholder="20" value="{{ allegro.get('allegro_price_list_id', '') }}">
+                <span class="field-help">
+                  To unikalny numer cennika z Apilo. Pobierzesz go z listy cenników
+                  (<code>GET /rest/api/warehouse/price/</code>). Ten identyfikator jest używany
+                  do pobrania cen Allegro przez <code>/rest/api/warehouse/price-calculated/?price=ID</code>.
+                </span>
               </label>
             </div>
             <div class="action-row">

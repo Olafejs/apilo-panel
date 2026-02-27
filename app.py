@@ -32,7 +32,6 @@ from db import (
     get_ean_name_map,
     get_product_maps,
     get_sales_cache_details_map,
-    get_sales_cache_map,
     get_sales_year_map,
     init_db,
     get_setting,
@@ -156,9 +155,6 @@ def normalize_base_url(value):
 
 
 def get_order_url_template():
-    template = get_setting(DB_PATH, "apilo_order_url_template")
-    if template:
-        return template
     base = normalize_base_url(
         get_config_value("APILO_BASE_URL", "apilo_base_url", "https://api.apilo.com")
     )
@@ -370,6 +366,7 @@ def index():
     offset = (page - 1) * limit
     lead_time_days = get_suggest_lead_time_days()
     safety_pct = get_suggest_safety_pct()
+    suggest_days = get_suggest_days()
     products = get_products(
         DB_PATH,
         search=search,
@@ -379,6 +376,7 @@ def index():
         offset=offset,
         lead_time_days=lead_time_days,
         safety_pct=safety_pct,
+        suggest_days=suggest_days,
     )
     total_count = get_products_count(DB_PATH, search=search)
     total_pages = max(1, (total_count + limit - 1) // limit)
@@ -394,18 +392,21 @@ def index():
             offset=offset,
             lead_time_days=lead_time_days,
             safety_pct=safety_pct,
+            suggest_days=suggest_days,
         )
     last_pull_at = get_setting(DB_PATH, "last_pull_at") or ""
     last_pull_human = format_pull_time(last_pull_at)
-    sales_cache = get_sales_cache_map(DB_PATH)
     details_cache = get_sales_cache_details_map(DB_PATH)
     year_summary = get_sales_year_map(DB_PATH)
     suggestions = {}
     suggest_details = {}
-    for ean, qty_30d in sales_cache.items():
-        avg_daily = qty_30d / 30.0
-        suggested = int((avg_daily * lead_time_days) * (1 + safety_pct / 100.0) + 0.9999)
-        suggestions[ean] = max(suggested, 0)
+    for product in products:
+        ean = product["ean"]
+        if not ean:
+            continue
+        suggested = product["suggested_qty"]
+        if suggested is not None:
+            suggestions[ean] = max(int(suggested), 0)
         details = details_cache.get(ean)
         if details:
             suggest_details[ean] = [
@@ -461,7 +462,6 @@ def settings():
             set_setting(DB_PATH, "apilo_base_url", request.form.get("apilo_base_url") or "")
             set_setting(DB_PATH, "apilo_client_id", request.form.get("apilo_client_id") or "")
             set_setting(DB_PATH, "apilo_client_secret", request.form.get("apilo_client_secret") or "")
-            set_setting(DB_PATH, "apilo_order_url_template", request.form.get("apilo_order_url_template") or "")
             auth_code = request.form.get("apilo_auth_code") or ""
             if auth_code:
                 try:
@@ -563,7 +563,6 @@ def settings():
         "apilo_base_url": get_setting(DB_PATH, "apilo_base_url") or "",
         "apilo_client_id": get_setting(DB_PATH, "apilo_client_id") or "",
         "apilo_client_secret": get_setting(DB_PATH, "apilo_client_secret") or "",
-        "apilo_order_url_template": get_setting(DB_PATH, "apilo_order_url_template") or "",
     }
     allegro_settings = {
         "allegro_price_list_id": str(get_allegro_price_list_id()),
@@ -579,6 +578,9 @@ def settings():
         "test_message": get_setting(DB_PATH, "api_test_message") or "",
         "test_at": format_pull_time(get_setting(DB_PATH, "api_test_at") or ""),
     }
+    api_locked = api_status["config_ok"] and api_status["tokens_ok"]
+    api_edit_mode = request.args.get("edit_api") == "1"
+    show_api_form = (not api_locked) or api_edit_mode
     inventory_values = {
         "store": get_setting(DB_PATH, "inventory_value_store") or "",
         "allegro": get_setting(DB_PATH, "inventory_value_allegro") or "",
@@ -591,6 +593,9 @@ def settings():
         api=api_settings,
         allegro=allegro_settings,
         api_status=api_status,
+        api_locked=api_locked,
+        api_edit_mode=api_edit_mode,
+        show_api_form=show_api_form,
         inventory_values=inventory_values,
         suggest_lead_time_days=get_suggest_lead_time_days(),
         suggest_safety_pct=get_suggest_safety_pct(),
