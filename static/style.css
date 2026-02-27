@@ -104,6 +104,16 @@ h1 {
   box-shadow: var(--shadow);
 }
 
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(26, 94, 59, 0.18);
+}
+
 .btn.primary {
   background: var(--accent);
   color: #fff;
@@ -457,19 +467,26 @@ tbody tr.dirty {
   border: 1px solid var(--border);
   background: #fff;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
-  transform-origin: left center;
+  transform-origin: center center;
   position: relative;
   z-index: 1;
 }
 
 .thumb-wrap:hover .thumb {
-  transform: scale(12.5);
+  transform: scale(5.5);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
   z-index: 100;
 }
 
 .thumb-wrap:hover {
   z-index: 100;
+}
+
+@media (hover: none) {
+  .thumb-wrap:hover .thumb {
+    transform: none;
+    box-shadow: none;
+  }
 }
 
 

@@ -24,7 +24,7 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label>
           Hasło
-          <input type="password" name="password" placeholder="Wpisz hasło">
+          <input type="password" name="password" placeholder="Wpisz hasło" autocomplete="current-password" autofocus required>
         </label>
         <button class="btn primary" type="submit">Zaloguj</button>
       </form>

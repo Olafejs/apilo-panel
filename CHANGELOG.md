@@ -16,6 +16,17 @@ All important changes should be tracked here together with the application versi
 
 - Additional validation coverage for SMTP fields and API URL templates.
 
+## [1.0.8] - 2026-02-27
+
+### Fixed
+
+- Improved keyboard accessibility by adding clear `:focus-visible` states for links, buttons and form controls.
+- Improved product table accessibility with descriptive image alt text and quantity input labels.
+- Reduced product thumbnail hover zoom intensity to avoid covering nearby content.
+- Prevented automatic refresh from triggering while user is typing in form fields.
+- Added ARIA expansion state handling for suggestion details toggles.
+- Improved auth form ergonomics with `autocomplete`, `required`, and initial field focus.
+
 ## [1.0.7] - 2026-02-27
 
 ### Fixed

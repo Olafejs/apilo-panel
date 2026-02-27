@@ -95,7 +95,7 @@
               <div class="product-cell">
                 {% if product["image_url"] %}
                   <span class="thumb-wrap">
-                    <img class="thumb" src="{{ url_for('thumb', apilo_id=product['apilo_id']) }}" alt="">
+                    <img class="thumb" src="{{ url_for('thumb', apilo_id=product['apilo_id']) }}" alt="{{ product['name'] or 'Miniatura produktu' }}">
                   </span>
                 {% endif %}
                 <div>
@@ -124,7 +124,7 @@
             {% if suggested is not none %}
               {% set sugg_class = "sugg-ok" if qty_num >= suggested else "sugg-low" %}
               <td class="qty subtle">
-                <button type="button" class="sugg-pill {{ sugg_class }} toggle-details" data-target="details-{{ product['id'] }}">
+                <button type="button" class="sugg-pill {{ sugg_class }} toggle-details" data-target="details-{{ product['id'] }}" aria-controls="details-{{ product['id'] }}" aria-expanded="false">
                   {{ suggested }}
                 </button>
               </td>
@@ -135,7 +135,7 @@
               <form method="post" action="{{ url_for('update_quantity', product_id=product['id']) }}" class="inline">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="next" value="{{ request.full_path }}">
-                <input type="number" name="quantity" min="0" step="1" value="{{ qty_num }}">
+                <input type="number" name="quantity" min="0" step="1" value="{{ qty_num }}" aria-label="Stan magazynowy dla {{ product['name'] or ('ID ' ~ product['id']) }}">
                 <button class="btn" type="submit">Zapisz</button>
               </form>
             </td>
@@ -233,7 +233,21 @@
       (function () {
         var remaining = {{ refresh_interval_seconds }};
         var el = document.getElementById("refresh-count");
+        var isUserEditing = function () {
+          var active = document.activeElement;
+          if (!active) {
+            return false;
+          }
+          var tag = (active.tagName || "").toLowerCase();
+          if (tag === "input" || tag === "select" || tag === "textarea") {
+            return true;
+          }
+          return active.isContentEditable === true;
+        };
         var tick = function () {
+          if (isUserEditing()) {
+            return;
+          }
           remaining -= 1;
           if (remaining <= 0) {
             var csrf = document.querySelector("meta[name='csrf-token']").content;
@@ -254,6 +268,7 @@
       (function () {
         var buttons = document.querySelectorAll(".toggle-details");
         buttons.forEach(function (btn) {
+          btn.setAttribute("aria-expanded", "false");
           btn.addEventListener("click", function () {
             var targetId = btn.getAttribute("data-target");
             var row = document.getElementById(targetId);
@@ -265,7 +280,13 @@
                 item.classList.remove("open");
               }
             });
-            row.classList.toggle("open");
+            buttons.forEach(function (otherBtn) {
+              if (otherBtn !== btn) {
+                otherBtn.setAttribute("aria-expanded", "false");
+              }
+            });
+            var isOpen = row.classList.toggle("open");
+            btn.setAttribute("aria-expanded", isOpen ? "true" : "false");
           });
         });
       })();
