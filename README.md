@@ -109,14 +109,17 @@ FLASK_SECRET_KEY=change-me
 APP_PASSWORD=
 APILO_DB_PATH=apilo.sqlite3
 
-APILO_BASE_URL=https://api.apilo.com
-APILO_CLIENT_ID=your_client_id
-APILO_CLIENT_SECRET=your_client_secret
+APILO_BASE_URL=
+APILO_CLIENT_ID=
+APILO_CLIENT_SECRET=
 APILO_DEVELOPER_ID=
 
 THUMB_TTL_SECONDS=86400
 REFRESH_INTERVAL_SECONDS=600
 ```
+
+Jeśli konfigurujesz API z poziomu panelu (`Ustawienia -> Dane API Apilo`), zostaw pola `APILO_*` puste w `.env`.  
+Wartości z `.env` mają priorytet nad ustawieniami zapisanymi w panelu.
 
 Najważniejsze zmienne:
 - `FLASK_SECRET_KEY`: klucz sesji Flask (ustaw silny i unikalny w środowisku produkcyjnym).
@@ -142,6 +145,8 @@ Każde konto ma własny adres (subdomenę), np. `twoje-konto.apilo.com`.
 - `Kod autoryzacji` z Apilo -> pole `Kod autoryzacji`.
 
 4. Pole `Ważność do` z Apilo jest informacyjne (pokazuje termin ważności kodu/tokenu) i nie wymaga osobnego pola w panelu.
+
+`Developer ID` jest opcjonalny i zwykle zostaje pusty przy standardowej aplikacji tworzonej w panelu Apilo.
 
 ## Deployment (opcjonalnie)
 Repo zawiera szablon usługi `systemd`: `apilo-panel.service`.
