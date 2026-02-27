@@ -182,6 +182,7 @@ h1 {
 
 .settings-clean {
   align-items: start;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
 }
 
 .settings-break {
@@ -636,12 +637,17 @@ tbody tr.dirty {
 
 .form-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px 14px;
+  align-items: start;
 }
 
 .form-grid .full {
   grid-column: 1 / -1;
+}
+
+.form-grid label {
+  min-width: 0;
 }
 
 .stack label {
@@ -672,6 +678,7 @@ tbody tr.dirty {
 .settings-grid .stack input[type="number"],
 .settings-grid .stack select {
   max-width: none;
+  min-width: 0;
 }
 
 .action-row {
@@ -679,6 +686,10 @@ tbody tr.dirty {
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.action-row .hint {
+  margin: 0;
 }
 
 .inline-action-form,
@@ -730,5 +741,11 @@ tbody tr.dirty {
 
   .form-grid .full {
     grid-column: auto;
+  }
+}
+
+@media (max-width: 1100px) {
+  .settings-clean {
+    grid-template-columns: 1fr;
   }
 }

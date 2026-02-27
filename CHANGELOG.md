@@ -8,9 +8,20 @@ All important changes should be tracked here together with the application versi
 
 - (none yet)
 
+### Fixed
+
+- (none yet)
+
 ### Planned
 
 - Additional validation coverage for SMTP fields and API URL templates.
+
+## [1.0.7] - 2026-02-27
+
+### Fixed
+
+- Improved settings form responsiveness to prevent fields from overflowing into neighboring cards.
+- Adjusted settings grid breakpoints for clearer layout on medium-width screens.
 
 ## [1.0.6] - 2026-02-27
 
