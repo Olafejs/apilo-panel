@@ -6,16 +6,24 @@ All important changes should be tracked here together with the application versi
 
 ### Changed
 
-- Removed platform-specific installer helper and simplified versioning workflow docs.
-- Reworked README for GitHub publication and added `LICENSE` + `CONTRIBUTING.md`.
-- Improved input validation for settings and quantity updates to avoid invalid runtime values.
-- Made refresh interval in UI configurable from `REFRESH_INTERVAL_SECONDS` instead of hard-coded value.
-- Added optional `APILO_DEVELOPER_ID` support in panel settings and API client config.
-- Regenerated session state on successful login to reduce session fixation risk.
+- (none yet)
 
 ### Planned
 
 - Additional validation coverage for SMTP fields and API URL templates.
+
+## [1.0.5] - 2026-02-27
+
+### Changed
+
+- Replaced account-specific API endpoint hint with a neutral placeholder (`https://twoje-konto.apilo.com`).
+- Added step-by-step Apilo API setup instructions in settings and README (including `.../admin/rest-api/` path).
+- Aligned settings copy with Apilo field names shown after app creation (`Adres API`, `Client ID`, `Client Secret`, `Kod autoryzacji`, `Ważność do`).
+
+### Fixed
+
+- Prevented common clean-install misconfiguration by leaving `APILO_*` fields empty in `.env.example` (avoids `.env` overriding panel settings with placeholders).
+- Documented configuration precedence (`.env` values override settings stored in panel) to reduce token-fetch failures.
 
 ## [1.0.4] - 2026-02-27
 
