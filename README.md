@@ -139,10 +139,9 @@ Każde konto ma własny adres (subdomenę), np. `twoje-konto.apilo.com`.
 - `Adres API (endpoint)` z Apilo -> pole `Adres API (endpoint)` w ustawieniach.
 - `Client ID` z Apilo -> pole `Client ID`.
 - `Client Secret` z Apilo -> pole `Client Secret`.
+- `Kod autoryzacji` z Apilo -> pole `Kod autoryzacji`.
 
-4. Tokeny możesz pobrać na dwa sposoby:
-- Wkleić `kod autoryzacji` i wybrać typ tokenu `Kod autoryzacji`.
-- Wkleić `Refresh Token` i wybrać typ tokenu `Refresh Token`.
+4. Pole `Ważność do` z Apilo jest informacyjne (pokazuje termin ważności kodu/tokenu) i nie wymaga osobnego pola w panelu.
 
 ## Deployment (opcjonalnie)
 Repo zawiera szablon usługi `systemd`: `apilo-panel.service`.
