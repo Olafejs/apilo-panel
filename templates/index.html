@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="utf-8">
+    <title>Apilo - Stany magazynowe</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  </head>
+  <body>
+    <div class="container">
+    <header class="topbar">
+      <div>
+        <h1>Stany magazynowe</h1>
+        <p class="subtle">Apilo + lokalny panel SQLite</p>
+      </div>
+      <div class="actions">
+        <a class="btn" href="{{ url_for('settings') }}">Ustawienia</a>
+        <form method="get" action="{{ url_for('sales_report') }}">
+          <button class="btn" type="submit">Raport sprzedaży</button>
+        </form>
+        <form method="post" action="{{ url_for('sync_pull') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn" type="submit">Pobierz z Apilo</button>
+        </form>
+        <div class="refresh-chip">
+          Ostatnie odświeżenie: <strong id="last-refresh">{{ last_pull_at or now_human }}</strong>
+          <span class="divider">·</span>
+          Kolejne za <strong id="refresh-count">{{ refresh_interval_seconds }}</strong>s
+        </div>
+        <form method="post" action="{{ url_for('logout') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn" type="submit">Wyloguj</button>
+        </form>
+      </div>
+    </header>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <section class="messages">
+          {% for category, message in messages %}
+            <div class="message {{ category }}">{{ message }}</div>
+          {% endfor %}
+        </section>
+      {% endif %}
+    {% endwith %}
+
+    <section class="filters">
+      <form method="get" action="{{ url_for('index') }}">
+        <input type="text" name="search" placeholder="Szukaj po SKU, nazwie, kodzie" value="{{ search }}">
+        <input type="hidden" name="sort" value="{{ sort }}">
+        <input type="hidden" name="order" value="{{ order }}">
+        <input type="hidden" name="limit" value="{{ limit }}">
+        <button class="btn" type="submit">Szukaj</button>
+        <a class="btn outline" href="{{ url_for('index', sort=sort, order=order, limit=limit, page=1) }}">Wyczyść</a>
+      </form>
+      <div class="hint">Wyniki: {{ total_count }}</div>
+    </section>
+
+    <section class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>
+              <a class="sort-link" href="{{ url_for('index', search=search, sort='name', order='desc' if sort == 'name' and order == 'asc' else 'asc', limit=limit, page=1) }}">
+                Nazwa
+                <span class="sort-indicator">
+                  {% if sort == 'name' %}{{ '▲' if order == 'asc' else '▼' }}{% endif %}
+                </span>
+              </a>
+            </th>
+            <th>
+              <a class="sort-link" href="{{ url_for('index', search=search, sort='quantity', order='desc' if sort == 'quantity' and order == 'asc' else 'asc', limit=limit, page=1) }}">
+                Stan
+                <span class="sort-indicator">
+                  {% if sort == 'quantity' %}{{ '▲' if order == 'asc' else '▼' }}{% endif %}
+                </span>
+              </a>
+            </th>
+            <th>
+              <a class="sort-link" href="{{ url_for('index', search=search, sort='shortage', order='desc' if sort == 'shortage' and order == 'asc' else 'asc', limit=limit, page=1) }}">
+                Sug. stan
+                <span class="sort-indicator">
+                  {% if sort == 'shortage' %}{{ '▲' if order == 'asc' else '▼' }}{% endif %}
+                </span>
+              </a>
+            </th>
+            <th>Akcje</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for product in products %}
+          <tr>
+            <td>
+              <div class="product-cell">
+                {% if product["image_url"] %}
+                  <span class="thumb-wrap">
+                    <img class="thumb" src="{{ url_for('thumb', apilo_id=product['apilo_id']) }}" alt="">
+                  </span>
+                {% endif %}
+                <div>
+                  <div class="name">{{ product["name"] or "-" }}</div>
+                  <div class="meta">
+                    Apilo ID:
+                    {% if product["apilo_id"] %}
+                      <a class="meta-link" href="{{ product_detail_base_url }}/warehouse/product/detail/{{ product['apilo_id'] }}/" target="_blank" rel="noreferrer">{{ product["apilo_id"] }}</a>
+                    {% else %}
+                      -
+                    {% endif %}
+                    · EAN: {{ product["ean"] or "-" }}
+                    · Allegro ID:
+                    {% if product["allegro_auction_id"] %}
+                      <a class="meta-link" href="https://allegro.pl/oferta/{{ product['allegro_auction_id'] }}" target="_blank" rel="noreferrer">{{ product["allegro_auction_id"] }}</a>
+                    {% else %}
+                      -
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+            </td>
+            <td class="qty">{{ product["quantity"] if product["quantity"] is not none else "-" }}</td>
+            {% set qty_num = product["quantity"] if product["quantity"] is not none else 0 %}
+            {% set suggested = suggestions.get(product["ean"]) if product["ean"] else none %}
+            {% if suggested is not none %}
+              {% set sugg_class = "sugg-ok" if qty_num >= suggested else "sugg-low" %}
+              <td class="qty subtle">
+                <button type="button" class="sugg-pill {{ sugg_class }} toggle-details" data-target="details-{{ product['id'] }}">
+                  {{ suggested }}
+                </button>
+              </td>
+            {% else %}
+              <td class="qty subtle">-</td>
+            {% endif %}
+            <td>
+              <form method="post" action="{{ url_for('update_quantity', product_id=product['id']) }}" class="inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="next" value="{{ request.full_path }}">
+                <input type="number" name="quantity" min="0" step="1" value="{{ qty_num }}">
+                <button class="btn" type="submit">Zapisz</button>
+              </form>
+            </td>
+          </tr>
+          <tr id="details-{{ product['id'] }}" class="details-row">
+            <td colspan="4">
+              {% set year = year_summary.get(product["ean"]) if product["ean"] else none %}
+              {% set base_price = product["price_with_tax"] %}
+              {% set allegro_price = product["allegro_price_with_tax"] %}
+              {% set base_price_num = base_price|float if base_price else none %}
+              {% set allegro_price_num = allegro_price|float if allegro_price else none %}
+              {% set sold_qty = year.quantity if year else 0 %}
+              {% set sold_value = (sold_qty * allegro_price_num) if allegro_price_num is not none else (sold_qty * base_price_num if base_price_num is not none else none) %}
+              {% set stock_value = (qty_num * allegro_price_num) if allegro_price_num is not none else (qty_num * base_price_num if base_price_num is not none else none) %}
+              {% if product["ean"] and (suggest_details.get(product["ean"]) or year) %}
+                <div class="details-panel">
+                  <div class="details-title">Zamówienia (data, ilość)</div>
+                  {% if year %}
+                    <div class="details-summary">
+                      Ostatnie 12 mies.: <strong>{{ year.orders }}</strong> zamówień, <strong>{{ year.quantity }}</strong> sprzedanych sztuk.
+                    </div>
+                  {% endif %}
+                  <div class="details-stats">
+                    <div>Cena sklepowa: <strong>{{ base_price | pln }}</strong></div>
+                    <div>Cena Allegro: <strong>{{ allegro_price | pln }}</strong></div>
+                    <div>Wartość sprzedaży (12 mies.): <strong>{{ sold_value | pln }}</strong></div>
+                    <div>Wartość magazynu: <strong>{{ stock_value | pln }}</strong></div>
+                  </div>
+                  {% if suggest_details.get(product["ean"]) %}
+                    <table class="details-table">
+                      <thead>
+                        <tr>
+                          <th>Data</th>
+                          <th>Ilość</th>
+                          <th>Link</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% for item in suggest_details.get(product["ean"]) %}
+                        <tr>
+                        <td>{{ item.date | date_pl }}</td>
+                          <td class="qty">{{ item.qty }}</td>
+                          <td><a href="{{ item.url }}" target="_blank" rel="noreferrer">Apilo</a></td>
+                        </tr>
+                        {% endfor %}
+                      </tbody>
+                    </table>
+                  {% else %}
+                    <div class="details-empty">Brak szczegółowej listy zamówień dla tego EAN.</div>
+                  {% endif %}
+                </div>
+              {% else %}
+                <div class="details-panel empty">Brak danych sprzedaży dla tego EAN.</div>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="4" class="empty">Brak produktów. Pobierz dane z Apilo.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <div class="table-controls bottom">
+        <form method="get" action="{{ url_for('index') }}" class="inline">
+          <input type="hidden" name="search" value="{{ search }}">
+          <input type="hidden" name="sort" value="{{ sort }}">
+          <input type="hidden" name="order" value="{{ order }}">
+          <label class="select-label">
+            Na stronie
+            <select name="limit" onchange="this.form.submit()">
+              <option value="25" {% if limit == 25 %}selected{% endif %}>25</option>
+              <option value="50" {% if limit == 50 %}selected{% endif %}>50</option>
+              <option value="100" {% if limit == 100 %}selected{% endif %}>100</option>
+              <option value="200" {% if limit == 200 %}selected{% endif %}>200</option>
+            </select>
+          </label>
+        </form>
+        <div class="pagination">
+          <span class="page-info">Strona {{ page }} z {{ total_pages }}</span>
+          <div class="page-links">
+            <a class="btn outline" href="{{ url_for('index', search=search, sort=sort, order=order, limit=limit, page=1) }}">1</a>
+            <a class="btn outline" href="{{ url_for('index', search=search, sort=sort, order=order, limit=limit, page=page-1 if page > 1 else 1) }}">‹</a>
+            <a class="btn outline" href="{{ url_for('index', search=search, sort=sort, order=order, limit=limit, page=page+1 if page < total_pages else total_pages) }}">›</a>
+            <a class="btn outline" href="{{ url_for('index', search=search, sort=sort, order=order, limit=limit, page=total_pages) }}">{{ total_pages }}</a>
+          </div>
+        </div>
+      </div>
+    </section>
+    <footer class="footer">
+      System autorstwa <strong>Błażej Ejsmont</strong> · <a href="https://weeball.pl" target="_blank" rel="noreferrer">weeball.pl</a> · Wersja {{ app_version }}
+    </footer>
+    </div>
+    <script>
+      (function () {
+        var remaining = {{ refresh_interval_seconds }};
+        var el = document.getElementById("refresh-count");
+        var tick = function () {
+          remaining -= 1;
+          if (remaining <= 0) {
+            var csrf = document.querySelector("meta[name='csrf-token']").content;
+            fetch("{{ url_for('sync_pull') }}", {
+              method: "POST",
+              headers: { "X-CSRF-Token": csrf }
+            })
+              .then(function () { window.location.reload(); })
+              .catch(function () { window.location.reload(); });
+            return;
+          }
+          if (el) {
+            el.textContent = String(remaining);
+          }
+        };
+        setInterval(tick, 1000);
+      })();
+      (function () {
+        var buttons = document.querySelectorAll(".toggle-details");
+        buttons.forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            var targetId = btn.getAttribute("data-target");
+            var row = document.getElementById(targetId);
+            if (!row) {
+              return;
+            }
+            document.querySelectorAll(".details-row").forEach(function (item) {
+              if (item.id !== targetId) {
+                item.classList.remove("open");
+              }
+            });
+            row.classList.toggle("open");
+          });
+        });
+      })();
+    </script>
+  </body>
+</html>

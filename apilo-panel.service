@@ -1,0 +1,13 @@
+[Unit]
+Description=Apilo Panel
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/apilo-panel
+ExecStart=/opt/apilo-panel/.venv/bin/python app.py
+Restart=always
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
