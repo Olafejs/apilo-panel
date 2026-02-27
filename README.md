@@ -26,38 +26,80 @@ Projekt jest lekki, szybki i prosty w utrzymaniu: `Flask + SQLite + requests`.
 - `python-dotenv`
 
 ## Szybki start
-1. Utwórz środowisko i aktywuj je:
+
+### Linux / macOS
+1. Sprawdź wersję Pythona (wymagany Python 3.10+):
 ```bash
-python -m venv .venv
+python3 --version
+```
+
+2. Utwórz i aktywuj virtualenv:
+```bash
+python3 -m venv .venv
 source .venv/bin/activate
 ```
-PowerShell (Windows):
-```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-```
 
-2. Zainstaluj zależności:
+3. Zainstaluj zależności:
 ```bash
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
-3. Utwórz lokalną konfigurację:
+4. Utwórz lokalną konfigurację:
 ```bash
 cp .env.example .env
 ```
-PowerShell (Windows):
-```powershell
-Copy-Item .env.example .env
-```
 
-4. Uruchom aplikację:
+5. Uruchom aplikację:
 ```bash
 python app.py
 ```
 
-5. Otwórz panel:
+### Windows (PowerShell)
+1. Sprawdź wersję Pythona (wymagany Python 3.10+):
+```powershell
+py -3 --version
+```
+
+2. Utwórz i aktywuj virtualenv:
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+Jeśli aktywacja jest blokowana polityką systemu:
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
+```
+
+3. Zainstaluj zależności:
+```powershell
+python -m pip install -r requirements.txt
+```
+
+4. Utwórz lokalną konfigurację:
+```powershell
+Copy-Item .env.example .env
+```
+
+5. Uruchom aplikację:
+```powershell
+python app.py
+```
+
+### Otwórz panel
 - [http://127.0.0.1:5000](http://127.0.0.1:5000)
+
+### Najczęstszy błąd: `No module named venv`
+Jeśli widzisz:
+`/Library/.../Python 2.7 ... No module named venv`,
+to znaczy, że komenda `python` wskazuje na Python 2.7.
+
+Użyj:
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
 
 ## Konfiguracja
 Przykładowy `.env`:
@@ -83,6 +125,24 @@ Najważniejsze zmienne:
 - `APILO_DB_PATH`: ścieżka lokalnej bazy SQLite.
 - `THUMB_TTL_SECONDS`: czas życia cache miniatur.
 - `REFRESH_INTERVAL_SECONDS`: interwał automatycznego odświeżania w tle.
+
+## Skąd wziąć dane API Apilo
+1. Zaloguj się do swojego panelu Apilo i wejdź na:
+```text
+https://twoje-konto.apilo.com/admin/rest-api/
+```
+Każde konto ma własny adres (subdomenę), np. `twoje-konto.apilo.com`.
+
+2. Przejdź do zakładki **Klucze API Apilo** i kliknij **Nowa aplikacja REST API**.
+
+3. Po utworzeniu aplikacji przepisz dane do panelu:
+- `Adres API (endpoint)` z Apilo -> pole `Adres API (endpoint)` w ustawieniach.
+- `Client ID` z Apilo -> pole `Client ID`.
+- `Client Secret` z Apilo -> pole `Client Secret`.
+
+4. Tokeny możesz pobrać na dwa sposoby:
+- Wkleić `kod autoryzacji` i wybrać typ tokenu `Kod autoryzacji`.
+- Wkleić `Refresh Token` i wybrać typ tokenu `Refresh Token`.
 
 ## Deployment (opcjonalnie)
 Repo zawiera szablon usługi `systemd`: `apilo-panel.service`.

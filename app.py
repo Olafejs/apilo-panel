@@ -467,11 +467,15 @@ def settings():
                 request.form.get("allegro_price_list_id"), 20, min_value=1
             )
             set_setting(DB_PATH, "allegro_price_list_id", str(allegro_price_list_id))
-            auth_code = request.form.get("apilo_auth_code") or ""
-            if auth_code:
+            grant_type = request.form.get("apilo_grant_type") or "authorization_code"
+            if grant_type not in ("authorization_code", "refresh_token"):
+                grant_type = "authorization_code"
+            set_setting(DB_PATH, "apilo_grant_type", grant_type)
+            auth_token = request.form.get("apilo_auth_code") or ""
+            if auth_token:
                 try:
                     client = get_client()
-                    client._fetch_tokens("authorization_code", auth_code)
+                    client._fetch_tokens(grant_type, auth_token)
                     flash("Dane API zapisane i tokeny pobrane.", "success")
                 except Exception as exc:
                     app.logger.exception("API token fetch failed")
@@ -565,6 +569,7 @@ def settings():
         "apilo_developer_id": get_setting(DB_PATH, "apilo_developer_id") or "",
         "apilo_order_url_template": get_setting(DB_PATH, "apilo_order_url_template") or "",
         "allegro_price_list_id": str(get_allegro_price_list_id()),
+        "apilo_grant_type": get_setting(DB_PATH, "apilo_grant_type") or "authorization_code",
     }
     api_status = {
         "config_ok": bool(

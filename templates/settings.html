@@ -61,12 +61,25 @@
           <button class="btn outline small toggle-card" type="button">Edytuj</button>
         </div>
         <div class="collapse-body">
+          <div class="api-help">
+            <p><strong>Skad wziac dane API Apilo:</strong></p>
+            <ol>
+              <li>Wejdz na adres swojego konta: <code>https://twoje-konto.apilo.com/admin/rest-api/</code>.</li>
+              <li>W zakladce <strong>Klucze API Apilo</strong> kliknij <strong>Nowa aplikacja REST API</strong> i utworz aplikacje.</li>
+              <li>Przepisz dane z Apilo do pol poniżej.</li>
+            </ol>
+            <p class="hint">
+              Mapowanie pol: <strong>Adres API (endpoint)</strong> -> Adres API (endpoint),
+              <strong>Client ID</strong> -> Client ID, <strong>Client Secret</strong> -> Client Secret.
+              W polu tokenu mozesz uzyc kodu autoryzacji albo refresh tokenu (wybierz typ tokenu poniżej).
+            </p>
+          </div>
           <form method="post" class="stack">
           <input type="hidden" name="action" value="api">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <label>
             Adres API (endpoint)
-            <input type="text" name="apilo_base_url" placeholder="https://olafejs.apilo.com" value="{{ api.get('apilo_base_url', '') }}">
+            <input type="text" name="apilo_base_url" placeholder="https://twoje-konto.apilo.com" value="{{ api.get('apilo_base_url', '') }}">
           </label>
           <label>
             Client ID
@@ -89,8 +102,15 @@
             <input type="number" min="1" step="1" name="allegro_price_list_id" placeholder="20" value="{{ api.get('allegro_price_list_id', '') }}">
           </label>
           <label>
-            Kod autoryzacji
-            <input type="text" name="apilo_auth_code" placeholder="Wklej kod autoryzacji">
+            Typ tokenu
+            <select name="apilo_grant_type">
+              <option value="authorization_code" {% if api.get('apilo_grant_type') != 'refresh_token' %}selected{% endif %}>Kod autoryzacji</option>
+              <option value="refresh_token" {% if api.get('apilo_grant_type') == 'refresh_token' %}selected{% endif %}>Refresh Token</option>
+            </select>
+          </label>
+          <label>
+            Token z Apilo
+            <input type="text" name="apilo_auth_code" placeholder="Wklej kod autoryzacji lub refresh token">
           </label>
           <button class="btn" type="submit">Zapisz dane i pobierz token</button>
           </form>
