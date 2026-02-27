@@ -180,7 +180,7 @@ def get_client():
         ),
         client_id=get_config_value("APILO_CLIENT_ID", "apilo_client_id"),
         client_secret=get_config_value("APILO_CLIENT_SECRET", "apilo_client_secret"),
-        developer_id=get_config_value("APILO_DEVELOPER_ID", "apilo_developer_id"),
+        developer_id=None,
         db_path=DB_PATH,
         grant_type=os.getenv("APILO_GRANT_TYPE"),
         auth_token=os.getenv("APILO_AUTH_TOKEN"),
@@ -461,12 +461,7 @@ def settings():
             set_setting(DB_PATH, "apilo_base_url", request.form.get("apilo_base_url") or "")
             set_setting(DB_PATH, "apilo_client_id", request.form.get("apilo_client_id") or "")
             set_setting(DB_PATH, "apilo_client_secret", request.form.get("apilo_client_secret") or "")
-            set_setting(DB_PATH, "apilo_developer_id", request.form.get("apilo_developer_id") or "")
             set_setting(DB_PATH, "apilo_order_url_template", request.form.get("apilo_order_url_template") or "")
-            allegro_price_list_id = parse_int_value(
-                request.form.get("allegro_price_list_id"), 20, min_value=1
-            )
-            set_setting(DB_PATH, "allegro_price_list_id", str(allegro_price_list_id))
             auth_code = request.form.get("apilo_auth_code") or ""
             if auth_code:
                 try:
@@ -499,6 +494,12 @@ def settings():
                 set_setting(DB_PATH, "api_test_message", message)
                 set_setting(DB_PATH, "api_test_at", utc_now_iso())
                 flash(message, "error")
+        elif action == "allegro":
+            allegro_price_list_id = parse_int_value(
+                request.form.get("allegro_price_list_id"), 20, min_value=1
+            )
+            set_setting(DB_PATH, "allegro_price_list_id", str(allegro_price_list_id))
+            flash("Ustawienia Allegro zapisane.", "success")
         elif action == "email_test":
             try:
                 send_test_email()
@@ -562,8 +563,9 @@ def settings():
         "apilo_base_url": get_setting(DB_PATH, "apilo_base_url") or "",
         "apilo_client_id": get_setting(DB_PATH, "apilo_client_id") or "",
         "apilo_client_secret": get_setting(DB_PATH, "apilo_client_secret") or "",
-        "apilo_developer_id": get_setting(DB_PATH, "apilo_developer_id") or "",
         "apilo_order_url_template": get_setting(DB_PATH, "apilo_order_url_template") or "",
+    }
+    allegro_settings = {
         "allegro_price_list_id": str(get_allegro_price_list_id()),
     }
     api_status = {
@@ -587,6 +589,7 @@ def settings():
         required=tokens_missing(),
         email=email_settings,
         api=api_settings,
+        allegro=allegro_settings,
         api_status=api_status,
         inventory_values=inventory_values,
         suggest_lead_time_days=get_suggest_lead_time_days(),

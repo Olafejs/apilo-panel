@@ -176,6 +176,30 @@ h1 {
   grid-column: 1 / -1;
 }
 
+.settings-grid > .full {
+  grid-column: 1 / -1;
+}
+
+.settings-clean {
+  align-items: start;
+}
+
+.settings-break {
+  grid-column: 1 / -1;
+  padding: 4px 2px;
+}
+
+.settings-break h2 {
+  margin: 0 0 4px 0;
+  font-size: 1.1rem;
+}
+
+.settings-break p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -507,6 +531,10 @@ tbody tr.dirty {
   margin-bottom: 20px;
 }
 
+.settings-grid .card {
+  margin-bottom: 0;
+}
+
 .card-desc {
   margin: 6px 0 16px 0;
   color: var(--muted);
@@ -524,6 +552,14 @@ tbody tr.dirty {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.settings-grid .card-head {
+  align-items: flex-start;
+}
+
+.settings-grid .card-head h2 {
+  margin: 0;
 }
 
 .api-help {
@@ -598,6 +634,16 @@ tbody tr.dirty {
   gap: 12px;
 }
 
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 12px 14px;
+}
+
+.form-grid .full {
+  grid-column: 1 / -1;
+}
+
 .stack label {
   display: flex;
   flex-direction: column;
@@ -619,6 +665,27 @@ tbody tr.dirty {
 
 .stack .btn {
   align-self: flex-start;
+}
+
+.settings-grid .stack input[type="text"],
+.settings-grid .stack input[type="password"],
+.settings-grid .stack input[type="number"],
+.settings-grid .stack select {
+  max-width: none;
+}
+
+.action-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.inline-action-form,
+.api-test-form {
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
 }
 
 .collapsible .collapse-body {
@@ -655,5 +722,13 @@ tbody tr.dirty {
 
   .actions {
     width: 100%;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-grid .full {
+    grid-column: auto;
   }
 }

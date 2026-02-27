@@ -9,249 +9,197 @@
   </head>
   <body>
     <div class="container">
-    <header class="topbar">
-      <div>
-        <h1>Ustawienia</h1>
-        <p class="subtle">Zarządzanie tokenami Apilo</p>
-      </div>
-      <div class="actions">
-        <a class="btn" href="{{ url_for('index') }}">Powrót</a>
-        <form method="post" action="{{ url_for('logout') }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button class="btn" type="submit">Wyloguj</button>
-        </form>
-      </div>
-    </header>
-
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        <section class="messages">
-          {% for category, message in messages %}
-            <div class="message {{ category }}">{{ message }}</div>
-          {% endfor %}
-        </section>
-      {% endif %}
-    {% endwith %}
-
-    <section class="table-wrap settings-grid">
-      {% if required %}
-        <div class="message error">
-          Brak tokenów Apilo. Wprowadź je, aby system mógł działać.
+      <header class="topbar">
+        <div>
+          <h1>Ustawienia</h1>
+          <p class="subtle">Konfiguracja panelu i integracji</p>
         </div>
-      {% endif %}
-      <div class="card full collapsible {% if required %}open{% endif %}">
-        <div class="card-head">
-          <div>
-            <h2>Dane API Apilo</h2>
-            <p class="card-desc">Ustaw dane dostepu do API i pobierz token, aby system mogl dzialac.</p>
+        <div class="actions">
+          <a class="btn" href="{{ url_for('index') }}">Powrót</a>
+          <form method="post" action="{{ url_for('logout') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn" type="submit">Wyloguj</button>
+          </form>
+        </div>
+      </header>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <section class="messages">
+            {% for category, message in messages %}
+              <div class="message {{ category }}">{{ message }}</div>
+            {% endfor %}
+          </section>
+        {% endif %}
+      {% endwith %}
+
+      <section class="table-wrap settings-grid settings-clean">
+        {% if required %}
+          <div class="message error full">
+            Brak tokenów Apilo. Wprowadź je, aby system mógł działać.
           </div>
-          <div class="status-row">
-            <span class="status {{ 'ok' if api_status.config_ok else 'error' }}">
-              {{ 'Dane OK' if api_status.config_ok else 'Brak danych' }}
-            </span>
-            <span class="status {{ 'ok' if api_status.tokens_ok else 'error' }}">
-              {{ 'Token OK' if api_status.tokens_ok else 'Brak tokenu' }}
-            </span>
-            {% if api_status.test_status %}
-              <span class="status {{ api_status.test_status }}">
-                {{ 'Test OK' if api_status.test_status == 'ok' else 'Test błąd' }}
+        {% endif %}
+
+        <div class="settings-break full">
+          <h2>Połączenie z Apilo</h2>
+          <p>Najpierw skonfiguruj API Apilo, potem ustawienia Allegro.</p>
+        </div>
+
+        <div class="card full">
+          <div class="card-head">
+            <div>
+              <h2>Dane API Apilo</h2>
+              <p class="card-desc">Wpisz dane aplikacji REST API z panelu Apilo i pobierz token.</p>
+            </div>
+            <div class="status-row">
+              <span class="status {{ 'ok' if api_status.config_ok else 'error' }}">
+                {{ 'Dane OK' if api_status.config_ok else 'Brak danych' }}
               </span>
-            {% endif %}
+              <span class="status {{ 'ok' if api_status.tokens_ok else 'error' }}">
+                {{ 'Token OK' if api_status.tokens_ok else 'Brak tokenu' }}
+              </span>
+              {% if api_status.test_status %}
+                <span class="status {{ api_status.test_status }}">
+                  {{ 'Test OK' if api_status.test_status == 'ok' else 'Test błąd' }}
+                </span>
+              {% endif %}
+            </div>
           </div>
-          <button class="btn outline small toggle-card" type="button">Edytuj</button>
-        </div>
-        <div class="collapse-body">
+
           <div class="api-help">
-            <p><strong>Skad wziac dane API Apilo:</strong></p>
+            <p><strong>Skąd wziąć dane API Apilo:</strong></p>
             <ol>
-              <li>Wejdz na adres swojego konta: <code>https://twoje-konto.apilo.com/admin/rest-api/</code>.</li>
-              <li>W zakladce <strong>Klucze API Apilo</strong> kliknij <strong>Nowa aplikacja REST API</strong> i utworz aplikacje.</li>
-              <li>Przepisz dane z Apilo do pol poniżej.</li>
+              <li>Wejdź na adres swojego konta: <code>https://twoje-konto.apilo.com/admin/rest-api/</code>.</li>
+              <li>W zakładce <strong>Klucze API Apilo</strong> kliknij <strong>Nowa aplikacja REST API</strong>.</li>
+              <li>Przepisz do panelu: Adres API, Client ID, Client Secret, Kod autoryzacji.</li>
             </ol>
-            <p class="hint">Po utworzeniu aplikacji Apilo pokazuje: Adres API (endpoint), Client ID, Client Secret, Kod autoryzacji, Ważność do.</p>
           </div>
-          <form method="post" class="stack">
-          <input type="hidden" name="action" value="api">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <label>
-            Adres API (endpoint)
-            <input type="text" name="apilo_base_url" placeholder="https://twoje-konto.apilo.com" value="{{ api.get('apilo_base_url', '') }}">
-          </label>
-          <label>
-            Client ID
-            <input type="text" name="apilo_client_id" value="{{ api.get('apilo_client_id', '') }}">
-          </label>
-          <label>
-            Client Secret
-            <input type="password" name="apilo_client_secret" value="{{ api.get('apilo_client_secret', '') }}">
-          </label>
-          <label>
-            Developer ID (opcjonalnie)
-            <input type="text" name="apilo_developer_id" value="{{ api.get('apilo_developer_id', '') }}">
-          </label>
-          <label>
-            Szablon linku do zamówienia
-            <input type="text" name="apilo_order_url_template" placeholder="{base}/order/order/detail/{id}/" value="{{ api.get('apilo_order_url_template', '') }}">
-          </label>
-          <label>
-            ID cennika Allegro
-            <input type="number" min="1" step="1" name="allegro_price_list_id" placeholder="20" value="{{ api.get('allegro_price_list_id', '') }}">
-          </label>
-          <label>
-            Kod autoryzacji
-            <input type="text" name="apilo_auth_code" placeholder="Wklej kod autoryzacji z Apilo">
-          </label>
-          <button class="btn" type="submit">Zapisz dane i pobierz token</button>
-          </form>
-          <form method="post" class="stack">
-          <input type="hidden" name="action" value="api_test">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button class="btn primary" type="submit">Testuj połączenie</button>
-          {% if api_status.test_message %}
-            <div class="hint">Ostatni test: {{ api_status.test_at }} – {{ api_status.test_message }}</div>
-          {% endif %}
-          </form>
-        </div>
-      </div>
 
-      <div class="card collapsible">
-        <div class="card-head">
-          <div>
-            <h2>Email (SMTP)</h2>
-            <p class="card-desc">Skonfiguruj wysylke powiadomien i przetestuj skrzynke.</p>
-          </div>
-          <button class="btn outline small toggle-card" type="button">Edytuj</button>
-        </div>
-        <div class="collapse-body">
           <form method="post" class="stack">
-          <input type="hidden" name="action" value="email">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <label>
-            SMTP host
-            <input type="text" name="smtp_host" value="{{ email.get('smtp_host', '') }}">
-          </label>
-          <label>
-            SMTP port
-            <input type="text" name="smtp_port" value="{{ email.get('smtp_port', '') }}">
-          </label>
-          <label>
-            SMTP user
-            <input type="text" name="smtp_user" value="{{ email.get('smtp_user', '') }}">
-          </label>
-          <label>
-            SMTP password
-            <input type="password" name="smtp_password" value="{{ email.get('smtp_password', '') }}">
-          </label>
-          <label>
-            Użyj STARTTLS
-            <select name="smtp_use_tls">
-              <option value="0" {% if email.get('smtp_use_tls') == '0' %}selected{% endif %}>Nie</option>
-              <option value="1" {% if email.get('smtp_use_tls') == '1' %}selected{% endif %}>Tak</option>
-            </select>
-          </label>
-          <label>
-            Użyj SSL (port 465)
-            <select name="smtp_use_ssl">
-              <option value="0" {% if email.get('smtp_use_ssl') == '0' %}selected{% endif %}>Nie</option>
-              <option value="1" {% if email.get('smtp_use_ssl') == '1' %}selected{% endif %}>Tak</option>
-            </select>
-          </label>
-          <label>
-            Nadawca (From)
-            <input type="text" name="smtp_from" value="{{ email.get('smtp_from', '') }}">
-          </label>
-          <label>
-            Odbiorca testowy (To)
-            <input type="text" name="smtp_to" value="{{ email.get('smtp_to', '') }}">
-          </label>
-          <button class="btn" type="submit">Zapisz ustawienia email</button>
+            <input type="hidden" name="action" value="api">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-grid">
+              <label class="full">
+                Adres API (endpoint)
+                <input type="text" name="apilo_base_url" placeholder="https://twoje-konto.apilo.com" value="{{ api.get('apilo_base_url', '') }}">
+              </label>
+              <label>
+                Client ID
+                <input type="text" name="apilo_client_id" value="{{ api.get('apilo_client_id', '') }}">
+              </label>
+              <label>
+                Client Secret
+                <input type="password" name="apilo_client_secret" value="{{ api.get('apilo_client_secret', '') }}">
+              </label>
+              <label>
+                Kod autoryzacji
+                <input type="text" name="apilo_auth_code" placeholder="Wklej kod autoryzacji z Apilo">
+              </label>
+              <label class="full">
+                Szablon linku do zamówienia
+                <input type="text" name="apilo_order_url_template" placeholder="{base}/order/order/detail/{id}/" value="{{ api.get('apilo_order_url_template', '') }}">
+              </label>
+            </div>
+            <div class="action-row">
+              <button class="btn primary" type="submit">Zapisz dane i pobierz token</button>
+            </div>
           </form>
-          <form method="post" class="stack">
-          <input type="hidden" name="action" value="email_test">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button class="btn primary" type="submit">Wyślij testowy email</button>
-          </form>
-        </div>
-      </div>
 
-      <div class="card collapsible">
-        <div class="card-head">
-          <div>
-            <h2>Zmiana hasła</h2>
-            <p class="card-desc">Zmien haslo dostepu do panelu.</p>
-          </div>
-          <button class="btn outline small toggle-card" type="button">Edytuj</button>
-        </div>
-        <div class="collapse-body">
-          <form method="post" class="stack">
-          <input type="hidden" name="action" value="password">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <label>
-            Nowe hasło (min. 8 znaków)
-            <input type="password" name="password" placeholder="Wpisz nowe hasło">
-          </label>
-          <label>
-            Powtórz hasło
-            <input type="password" name="confirm" placeholder="Powtórz hasło">
-          </label>
-          <button class="btn" type="submit">Zmień hasło</button>
+          <form method="post" class="stack api-test-form">
+            <input type="hidden" name="action" value="api_test">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="action-row">
+              <button class="btn" type="submit">Testuj połączenie</button>
+              {% if api_status.test_message %}
+                <div class="hint">Ostatni test: {{ api_status.test_at }} - {{ api_status.test_message }}</div>
+              {% endif %}
+            </div>
           </form>
         </div>
-      </div>
 
-      <div class="card collapsible">
-        <div class="card-head">
-          <div>
-            <h2>Sugestie stanów</h2>
-            <p class="card-desc">Ustaw okres sprzedazy i bufor dla sugerowanych stanow.</p>
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>Ustawienia Allegro</h2>
+              <p class="card-desc">Ta sekcja dotyczy wyłącznie danych Allegro.</p>
+            </div>
           </div>
-          <button class="btn outline small toggle-card" type="button">Edytuj</button>
-        </div>
-        <div class="collapse-body">
           <form method="post" class="stack">
-          <input type="hidden" name="action" value="suggestions">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <label>
-            Czas produkcji (dni)
-            <input type="number" min="1" step="1" name="lead_time_days" value="{{ suggest_lead_time_days or 1 }}">
-          </label>
-          <label>
-            Okres sprzedaży do kalkulacji (dni)
-            <select name="suggest_days">
-              <option value="30" {% if suggest_days == 30 %}selected{% endif %}>30</option>
-              <option value="60" {% if suggest_days == 60 %}selected{% endif %}>60</option>
-              <option value="120" {% if suggest_days == 120 %}selected{% endif %}>120</option>
-              <option value="180" {% if suggest_days == 180 %}selected{% endif %}>180</option>
-              <option value="365" {% if suggest_days == 365 %}selected{% endif %}>365</option>
-            </select>
-          </label>
-          <label>
-            Bufor bezpieczeństwa (%)
-            <input type="number" min="0" step="0.1" name="safety_pct" value="{{ suggest_safety_pct or 20 }}">
-          </label>
-          <button class="btn" type="submit">Zapisz ustawienia</button>
+            <input type="hidden" name="action" value="allegro">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-grid">
+              <label>
+                ID cennika Allegro
+                <input type="number" min="1" step="1" name="allegro_price_list_id" placeholder="20" value="{{ allegro.get('allegro_price_list_id', '') }}">
+              </label>
+            </div>
+            <div class="action-row">
+              <button class="btn" type="submit">Zapisz ustawienia Allegro</button>
+            </div>
           </form>
+        </div>
+
+        <div class="settings-break full">
+          <h2>Operacje panelu</h2>
+          <p>Sugestie i przeliczenia magazynu.</p>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>Sugestie stanów</h2>
+              <p class="card-desc">Ustaw okres sprzedaży i bufor bezpieczeństwa.</p>
+            </div>
+          </div>
           <form method="post" class="stack">
+            <input type="hidden" name="action" value="suggestions">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-grid">
+              <label>
+                Czas produkcji (dni)
+                <input type="number" min="1" step="1" name="lead_time_days" value="{{ suggest_lead_time_days or 1 }}">
+              </label>
+              <label>
+                Okres sprzedaży do kalkulacji (dni)
+                <select name="suggest_days">
+                  <option value="30" {% if suggest_days == 30 %}selected{% endif %}>30</option>
+                  <option value="60" {% if suggest_days == 60 %}selected{% endif %}>60</option>
+                  <option value="120" {% if suggest_days == 120 %}selected{% endif %}>120</option>
+                  <option value="180" {% if suggest_days == 180 %}selected{% endif %}>180</option>
+                  <option value="365" {% if suggest_days == 365 %}selected{% endif %}>365</option>
+                </select>
+              </label>
+              <label>
+                Bufor bezpieczeństwa (%)
+                <input type="number" min="0" step="0.1" name="safety_pct" value="{{ suggest_safety_pct or 20 }}">
+              </label>
+            </div>
+            <div class="action-row">
+              <button class="btn" type="submit">Zapisz ustawienia</button>
+            </div>
+          </form>
+          <form method="post" class="stack inline-action-form">
             <input type="hidden" name="action" value="suggestions_refresh">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button class="btn primary" type="submit">Przelicz sugestie</button>
+            <div class="action-row">
+              <button class="btn primary" type="submit">Przelicz sugestie</button>
+            </div>
           </form>
         </div>
-      </div>
 
-      <div class="card collapsible">
-        <div class="card-head">
-          <div>
-            <h2>Wartość magazynu</h2>
-            <p class="card-desc">Przelicz calkowita wartosc magazynu wg cen sklepu i Allegro.</p>
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>Wartość magazynu</h2>
+              <p class="card-desc">Przelicz wartość wg cen sklepu i Allegro.</p>
+            </div>
           </div>
-          <button class="btn outline small toggle-card" type="button">Edytuj</button>
-        </div>
-        <div class="collapse-body">
           <form method="post" class="stack">
             <input type="hidden" name="action" value="inventory_value">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button class="btn primary" type="submit">Przelicz wartość magazynu</button>
+            <div class="action-row">
+              <button class="btn primary" type="submit">Przelicz wartość magazynu</button>
+            </div>
           </form>
           {% if inventory_values.store or inventory_values.allegro %}
             <div class="details-stats">
@@ -263,30 +211,101 @@
             <div class="details-empty">Brak przeliczonej wartości magazynu.</div>
           {% endif %}
         </div>
-      </div>
-    </section>
+
+        <div class="settings-break full">
+          <h2>Powiadomienia i bezpieczeństwo</h2>
+          <p>Konfiguracja email i hasła do panelu.</p>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>Email (SMTP)</h2>
+              <p class="card-desc">Skonfiguruj wysyłkę i przetestuj skrzynkę.</p>
+            </div>
+          </div>
+          <form method="post" class="stack">
+            <input type="hidden" name="action" value="email">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-grid">
+              <label>
+                SMTP host
+                <input type="text" name="smtp_host" value="{{ email.get('smtp_host', '') }}">
+              </label>
+              <label>
+                SMTP port
+                <input type="text" name="smtp_port" value="{{ email.get('smtp_port', '') }}">
+              </label>
+              <label>
+                SMTP user
+                <input type="text" name="smtp_user" value="{{ email.get('smtp_user', '') }}">
+              </label>
+              <label>
+                SMTP password
+                <input type="password" name="smtp_password" value="{{ email.get('smtp_password', '') }}">
+              </label>
+              <label>
+                Użyj STARTTLS
+                <select name="smtp_use_tls">
+                  <option value="0" {% if email.get('smtp_use_tls') == '0' %}selected{% endif %}>Nie</option>
+                  <option value="1" {% if email.get('smtp_use_tls') == '1' %}selected{% endif %}>Tak</option>
+                </select>
+              </label>
+              <label>
+                Użyj SSL (port 465)
+                <select name="smtp_use_ssl">
+                  <option value="0" {% if email.get('smtp_use_ssl') == '0' %}selected{% endif %}>Nie</option>
+                  <option value="1" {% if email.get('smtp_use_ssl') == '1' %}selected{% endif %}>Tak</option>
+                </select>
+              </label>
+              <label>
+                Nadawca (From)
+                <input type="text" name="smtp_from" value="{{ email.get('smtp_from', '') }}">
+              </label>
+              <label>
+                Odbiorca testowy (To)
+                <input type="text" name="smtp_to" value="{{ email.get('smtp_to', '') }}">
+              </label>
+            </div>
+            <div class="action-row">
+              <button class="btn" type="submit">Zapisz ustawienia email</button>
+            </div>
+          </form>
+          <form method="post" class="stack inline-action-form">
+            <input type="hidden" name="action" value="email_test">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="action-row">
+              <button class="btn primary" type="submit">Wyślij testowy email</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>Zmiana hasła</h2>
+              <p class="card-desc">Zmień hasło dostępu do panelu.</p>
+            </div>
+          </div>
+          <form method="post" class="stack">
+            <input type="hidden" name="action" value="password">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-grid">
+              <label>
+                Nowe hasło (min. 8 znaków)
+                <input type="password" name="password" placeholder="Wpisz nowe hasło">
+              </label>
+              <label>
+                Powtórz hasło
+                <input type="password" name="confirm" placeholder="Powtórz hasło">
+              </label>
+            </div>
+            <div class="action-row">
+              <button class="btn" type="submit">Zmień hasło</button>
+            </div>
+          </form>
+        </div>
+      </section>
     </div>
-    <script>
-      document.querySelectorAll(".collapsible").forEach(function (card) {
-        var toggle = card.querySelector(".toggle-card");
-        var body = card.querySelector(".collapse-body");
-        if (!toggle || !body) {
-          return;
-        }
-        if (card.classList.contains("open")) {
-          body.style.maxHeight = body.scrollHeight + "px";
-        } else {
-          body.style.maxHeight = "0px";
-        }
-        toggle.addEventListener("click", function () {
-          card.classList.toggle("open");
-          if (card.classList.contains("open")) {
-            body.style.maxHeight = body.scrollHeight + "px";
-          } else {
-            body.style.maxHeight = "0px";
-          }
-        });
-      });
-    </script>
   </body>
 </html>

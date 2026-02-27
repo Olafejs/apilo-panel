@@ -112,7 +112,6 @@ APILO_DB_PATH=apilo.sqlite3
 APILO_BASE_URL=
 APILO_CLIENT_ID=
 APILO_CLIENT_SECRET=
-APILO_DEVELOPER_ID=
 
 THUMB_TTL_SECONDS=86400
 REFRESH_INTERVAL_SECONDS=600
@@ -145,8 +144,6 @@ Każde konto ma własny adres (subdomenę), np. `twoje-konto.apilo.com`.
 - `Kod autoryzacji` z Apilo -> pole `Kod autoryzacji`.
 
 4. Pole `Ważność do` z Apilo jest informacyjne (pokazuje termin ważności kodu/tokenu) i nie wymaga osobnego pola w panelu.
-
-`Developer ID` jest opcjonalny i zwykle zostaje pusty przy standardowej aplikacji tworzonej w panelu Apilo.
 
 ## Deployment (opcjonalnie)
 Repo zawiera szablon usługi `systemd`: `apilo-panel.service`.

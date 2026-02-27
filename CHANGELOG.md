@@ -12,6 +12,15 @@ All important changes should be tracked here together with the application versi
 
 - Additional validation coverage for SMTP fields and API URL templates.
 
+## [1.0.6] - 2026-02-27
+
+### Changed
+
+- Reworked the Settings screen layout to make sections always visible and easier to navigate.
+- Split Apilo API configuration from Allegro configuration in separate forms/cards.
+- Moved "Kod autoryzacji" directly under "Client Secret" for clearer data entry flow.
+- Removed "Developer ID" from UI and setup docs to reduce confusion.
+
 ## [1.0.5] - 2026-02-27
 
 ### Changed
