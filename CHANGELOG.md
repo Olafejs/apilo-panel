@@ -16,6 +16,16 @@ All important changes should be tracked here together with the application versi
 
 - Additional validation coverage for SMTP fields.
 
+## [1.0.12] - 2026-02-28
+
+### Added
+
+- Added `JAK-URUCHOMIC.md` with a very short end-user startup guide for macOS, Windows, and Linux.
+
+### Changed
+
+- Added a prominent link to `JAK-URUCHOMIC.md` near the top of `README.md` so users can find the simplest startup steps immediately.
+
 ## [1.0.11] - 2026-02-28
 
 ### Added

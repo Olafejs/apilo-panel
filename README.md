@@ -3,6 +3,9 @@
 Nowoczesny panel WWW do zarządzania stanami magazynowymi produktów z Apilo.  
 Projekt jest lekki, szybki i prosty w utrzymaniu: `Flask + SQLite + requests`.
 
+Najprostsza instrukcja dla uzytkownika koncowego:
+- [JAK-URUCHOMIC.md](JAK-URUCHOMIC.md)
+
 ## Dlaczego ten projekt?
 - Jeden proces, jedna baza, zero zbędnej infrastruktury.
 - Konfiguracja API i tokenów bezpośrednio z poziomu panelu.
