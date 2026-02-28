@@ -35,6 +35,10 @@ Projekt jest lekki, szybki i prosty w utrzymaniu: `Flask + SQLite + requests`.
   - utworzy `.env` z `.env.example`, jesli brakuje pliku,
   - uruchomi panel i otworzy przegladarke na `http://127.0.0.1:5000`.
 - Jesli macOS zablokuje pierwszy start, kliknij prawym przyciskiem i wybierz `Open/Otworz`.
+- Jesli chcesz uniknac tego komunikatu w Finderze, uruchom raz:
+  [Build-Start-Apilo-App.command](Build-Start-Apilo-App.command)
+  z poziomu Terminala. Ten plik tworzy lokalnie `Start Apilo.app`, ktory mozesz potem uruchamiac dwuklikiem.
+- Jesli w katalogu projektu jest plik `AppIcon.icns`, generator użyje go jako ikony aplikacji `Start Apilo.app`.
 
 ### Linux / macOS
 1. Sprawdź wersję Pythona (wymagany Python 3.10+):

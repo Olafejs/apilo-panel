@@ -16,6 +16,18 @@ All important changes should be tracked here together with the application versi
 
 - Additional validation coverage for SMTP fields.
 
+## [1.0.11] - 2026-02-28
+
+### Added
+
+- Added `Build-Start-Apilo-App.command` to generate a local `Start Apilo.app` launcher on macOS.
+
+### Changed
+
+- Updated README with instructions for creating a local `.app` launcher to avoid Finder blocking the raw `.command` file.
+- Added generated macOS app bundles to `.gitignore` so local launchers are not committed by accident.
+- The macOS `.app` launcher generator now uses the local `AppIcon.icns` file as the app icon when present.
+
 ## [1.0.10] - 2026-02-28
 
 ### Added
