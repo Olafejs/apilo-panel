@@ -27,6 +27,15 @@ Projekt jest lekki, szybki i prosty w utrzymaniu: `Flask + SQLite + requests`.
 
 ## Szybki start
 
+### macOS - uruchomienie jednym kliknieciem
+- Uzyj pliku [Start-Apilo.command](Start-Apilo.command).
+- Po dwukliku macOS otworzy Terminal i:
+  - utworzy `.venv`, jesli go jeszcze nie ma,
+  - zainstaluje zaleznosci przy pierwszym uruchomieniu lub po zmianie `requirements.txt`,
+  - utworzy `.env` z `.env.example`, jesli brakuje pliku,
+  - uruchomi panel i otworzy przegladarke na `http://127.0.0.1:5000`.
+- Jesli macOS zablokuje pierwszy start, kliknij prawym przyciskiem i wybierz `Open/Otworz`.
+
 ### Linux / macOS
 1. Sprawdź wersję Pythona (wymagany Python 3.10+):
 ```bash
@@ -145,10 +154,11 @@ Każde konto ma własny adres (subdomenę), np. `twoje-konto.apilo.com`.
 
 4. Pole `Ważność do` z Apilo jest informacyjne (pokazuje termin ważności kodu/tokenu) i nie wymaga osobnego pola w panelu.
 
-## ID cennika Allegro - co to jest i skąd je wziąć
-- `ID cennika Allegro` to unikalny identyfikator cennika w Apilo.
+## ID cennika w Apilo (dla cen Allegro) - co to jest i skąd je wziąć
+- To unikalny identyfikator cennika w Apilo.
 - Panel używa go do pobrania cen Allegro przez endpoint:
   `GET /rest/api/warehouse/price-calculated/?price=<ID>`.
+- Te ceny są potem zapisywane lokalnie w panelu i używane do porównania ceny sklepowej z ceną Allegro oraz do wyceny magazynu.
 - Źródło tego ID:
   - lista cenników w Apilo,
   - albo API `GET /rest/api/warehouse/price/` (pole z identyfikatorem cennika).

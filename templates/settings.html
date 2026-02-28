@@ -131,8 +131,8 @@
         <div class="card">
           <div class="card-head">
             <div>
-              <h2>Ustawienia Allegro</h2>
-              <p class="card-desc">Ta sekcja dotyczy wyłącznie danych Allegro.</p>
+              <h2>Cennik Apilo dla cen Allegro</h2>
+              <p class="card-desc">To ustawienie wskazuje cennik zapisany w Apilo, z którego panel pobiera ceny Allegro.</p>
             </div>
           </div>
           <form method="post" class="stack">
@@ -140,17 +140,19 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="form-grid">
               <label>
-                ID cennika Allegro
+                ID cennika w Apilo
                 <input type="number" min="1" step="1" name="allegro_price_list_id" placeholder="20" value="{{ allegro.get('allegro_price_list_id', '') }}">
                 <span class="field-help">
                   To unikalny numer cennika z Apilo. Pobierzesz go z listy cenników
                   (<code>GET /rest/api/warehouse/price/</code>). Ten identyfikator jest używany
-                  do pobrania cen Allegro przez <code>/rest/api/warehouse/price-calculated/?price=ID</code>.
+                  podczas synchronizacji do pobrania cen Allegro przez
+                  <code>/rest/api/warehouse/price-calculated/?price=ID</code>, a potem
+                  zapisania ich w panelu do porównania cen i wyceny magazynu.
                 </span>
               </label>
             </div>
             <div class="action-row">
-              <button class="btn" type="submit">Zapisz ustawienia Allegro</button>
+              <button class="btn" type="submit">Zapisz ustawienia cennika</button>
             </div>
           </form>
         </div>

@@ -16,6 +16,17 @@ All important changes should be tracked here together with the application versi
 
 - Additional validation coverage for SMTP fields.
 
+## [1.0.10] - 2026-02-28
+
+### Added
+
+- Added a clickable macOS launcher script `Start-Apilo.command` that opens Terminal, prepares the virtual environment, installs dependencies when needed, creates `.env` from `.env.example`, starts the app, and opens the browser automatically.
+
+### Changed
+
+- Updated README with a one-click macOS startup section for the new launcher script.
+- Clarified in Settings that the price-list ID is an Apilo price list used to fetch Allegro prices during sync, not a value taken directly from Allegro.
+
 ## [1.0.9] - 2026-02-27
 
 ### Changed
