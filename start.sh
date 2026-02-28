@@ -4,6 +4,7 @@ set -eu
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$PROJECT_DIR"
+APP_URL="http://127.0.0.1:5000"
 
 find_python() {
   if command -v python3 >/dev/null 2>&1; then
@@ -12,6 +13,18 @@ find_python() {
   fi
   if command -v python >/dev/null 2>&1; then
     command -v python
+    return 0
+  fi
+  return 1
+}
+
+open_browser() {
+  if command -v open >/dev/null 2>&1; then
+    open "$APP_URL" >/dev/null 2>&1 || true
+    return 0
+  fi
+  if command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$APP_URL" >/dev/null 2>&1 || true
     return 0
   fi
   return 1
@@ -38,4 +51,6 @@ if [ ! -f ".env" ] && [ -f ".env.example" ]; then
 fi
 
 .venv/bin/python -m pip install -r requirements.txt
+( sleep 2; open_browser ) &
+echo "Uruchamiam panel: $APP_URL"
 .venv/bin/python app.py

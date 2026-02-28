@@ -37,7 +37,8 @@ Skrypt sam:
 - utworzy `.venv`, jesli go nie ma,
 - zainstaluje zaleznosci,
 - utworzy `.env`, jesli go nie ma,
-- uruchomi aplikacje.
+- uruchomi aplikacje,
+- sprobuje automatycznie otworzyc domyslna przegladarke.
 
 ### Windows (PowerShell)
 1. Otworz `PowerShell`.
@@ -61,6 +62,8 @@ Copy-Item .env.example .env
 ```text
 http://127.0.0.1:5000
 ```
+
+Skrypt sprobuje automatycznie otworzyc domyslna przegladarke.
 
 ### Linux
 1. Otworz terminal.

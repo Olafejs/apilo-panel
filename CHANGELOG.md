@@ -16,6 +16,13 @@ All important changes should be tracked here together with the application versi
 
 - Additional validation coverage for SMTP fields.
 
+## [1.0.15] - 2026-02-28
+
+### Changed
+
+- Updated `start.sh` to automatically open the default browser at `http://127.0.0.1:5000` after startup when the system supports it.
+- Updated `README.md` to mention automatic browser opening in the quick start steps.
+
 ## [1.0.14] - 2026-02-28
 
 ### Added
