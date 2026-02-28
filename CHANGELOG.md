@@ -16,6 +16,17 @@ All important changes should be tracked here together with the application versi
 
 - Additional validation coverage for SMTP fields.
 
+## [1.0.14] - 2026-02-28
+
+### Added
+
+- Added `start.sh`, a simple Terminal launcher for macOS and Linux that prepares `.venv`, installs dependencies, creates `.env` if needed, and starts the app.
+
+### Changed
+
+- Simplified `README.md` quick start for macOS and Linux to use `bash start.sh`.
+- Removed the unnecessary `xattr` step from the default startup instructions.
+
 ## [1.0.13] - 2026-02-28
 
 ### Removed

@@ -21,15 +21,10 @@ Projekt jest prosty: `Flask + SQLite + requests`.
 cd "/sciezka/do/apilo-panel"
 ```
 
-3. Wklej po kolei:
+3. Uruchom:
 
 ```bash
-xattr -dr com.apple.quarantine .
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-cp .env.example .env
-python app.py
+bash start.sh
 ```
 
 4. Otworz w przegladarce:
@@ -38,7 +33,11 @@ python app.py
 http://127.0.0.1:5000
 ```
 
-Jesli `python` wskazuje na Python 2.7, zawsze uzyj `python3` do utworzenia `.venv`.
+Skrypt sam:
+- utworzy `.venv`, jesli go nie ma,
+- zainstaluje zaleznosci,
+- utworzy `.env`, jesli go nie ma,
+- uruchomi aplikacje.
 
 ### Windows (PowerShell)
 1. Otworz `PowerShell`.
@@ -71,14 +70,10 @@ http://127.0.0.1:5000
 cd "/sciezka/do/apilo-panel"
 ```
 
-3. Wklej po kolei:
+3. Uruchom:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-cp .env.example .env
-python app.py
+bash start.sh
 ```
 
 4. Otworz w przegladarce:
