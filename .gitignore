@@ -28,8 +28,6 @@ apilo.sqlite3
 
 # OS files
 .DS_Store
-Start Apilo.app/
-Start Apilo backup *.app/
 
 # Editor files
 .idea/

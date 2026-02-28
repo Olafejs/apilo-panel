@@ -16,6 +16,18 @@ All important changes should be tracked here together with the application versi
 
 - Additional validation coverage for SMTP fields.
 
+## [1.0.13] - 2026-02-28
+
+### Removed
+
+- Removed the macOS launcher system from the repository (`Start-Apilo.command`, `Build-Start-Apilo-App.command`, generated `.app` handling, and `AppIcon.icns`).
+- Removed the separate `JAK-URUCHOMIC.md` file.
+
+### Changed
+
+- Moved the simplest startup steps directly into `README.md` under `Szybki start`.
+- Simplified `README.md` by removing the deployment, project structure, security, and versioning sections.
+
 ## [1.0.12] - 2026-02-28
 
 ### Added
