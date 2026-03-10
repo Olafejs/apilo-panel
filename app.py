@@ -28,6 +28,7 @@ from apilo import ApiloClient
 from db import (
     clear_login_attempts,
     count_recent_login_attempts,
+    get_dashboard_metrics,
     get_tokens,
     get_products,
     get_products_count,
@@ -170,6 +171,15 @@ SYNC_JOB_LABELS = {
     "inventory": "synchronizacja magazynu",
     "sales_cache": "odświeżanie sugestii sprzedaży",
 }
+PRODUCT_PRESET_LABELS = {
+    "all": "Wszystkie",
+    "shortage": "Braki",
+    "out_of_stock": "Zero stanu",
+    "no_ean": "Bez EAN",
+    "no_image": "Bez zdjecia",
+    "no_sales": "Bez sprzedazy",
+    "high_value": "Najwyzsza wartosc",
+}
 
 logging.basicConfig(
     level=logging.INFO,
@@ -267,6 +277,20 @@ def parse_datetime_value(value):
 
 def get_sync_job_label(job):
     return SYNC_JOB_LABELS.get(job, "synchronizacja")
+
+
+def normalize_product_preset(value):
+    return value if value in PRODUCT_PRESET_LABELS else "all"
+
+
+def default_sort_for_preset(preset):
+    if preset == "high_value":
+        return "stock_value", "desc"
+    if preset == "no_sales":
+        return "sales_year", "asc"
+    if preset in {"out_of_stock", "no_ean", "no_image"}:
+        return "name", "asc"
+    return "shortage", "desc"
 
 
 def update_sync_status(**changes):
@@ -672,8 +696,10 @@ def index():
     if tokens_missing():
         return redirect(url_for("settings"))
     search = request.args.get("search")
-    sort = request.args.get("sort") or "shortage"
-    order = request.args.get("order") or ("desc" if sort == "shortage" else "asc")
+    preset = normalize_product_preset(request.args.get("preset") or "all")
+    default_sort, default_order = default_sort_for_preset(preset)
+    sort = request.args.get("sort") or default_sort
+    order = request.args.get("order") or default_order
     try:
         page = int(request.args.get("page") or 1)
     except ValueError:
@@ -693,6 +719,7 @@ def index():
     products = get_products(
         DB_PATH,
         search=search,
+        preset=preset,
         sort=sort,
         order=order,
         limit=limit,
@@ -701,7 +728,14 @@ def index():
         safety_pct=safety_pct,
         suggest_days=suggest_days,
     )
-    total_count = get_products_count(DB_PATH, search=search)
+    total_count = get_products_count(
+        DB_PATH,
+        search=search,
+        preset=preset,
+        lead_time_days=lead_time_days,
+        safety_pct=safety_pct,
+        suggest_days=suggest_days,
+    )
     total_pages = max(1, (total_count + limit - 1) // limit)
     if page > total_pages:
         page = total_pages
@@ -709,6 +743,7 @@ def index():
         products = get_products(
             DB_PATH,
             search=search,
+            preset=preset,
             sort=sort,
             order=order,
             limit=limit,
@@ -717,8 +752,31 @@ def index():
             safety_pct=safety_pct,
             suggest_days=suggest_days,
         )
-    last_pull_at = get_setting(DB_PATH, "last_pull_at") or ""
-    last_pull_human = format_pull_time(last_pull_at)
+    dashboard = get_dashboard_metrics(
+        DB_PATH,
+        lead_time_days=lead_time_days,
+        safety_pct=safety_pct,
+        suggest_days=suggest_days,
+    )
+    preset_counts = {
+        "all": dashboard.get("total_products", 0) or 0,
+        "shortage": dashboard.get("shortage_count", 0) or 0,
+        "out_of_stock": dashboard.get("out_of_stock_count", 0) or 0,
+        "no_ean": dashboard.get("missing_ean_count", 0) or 0,
+        "no_image": dashboard.get("missing_image_count", 0) or 0,
+        "no_sales": dashboard.get("no_sales_count", 0) or 0,
+        "high_value": dashboard.get("high_value_count", 0) or 0,
+    }
+    preset_options = [
+        {
+            "id": key,
+            "label": label,
+            "count": preset_counts.get(key, 0),
+            "sort": default_sort_for_preset(key)[0],
+            "order": default_sort_for_preset(key)[1],
+        }
+        for key, label in PRODUCT_PRESET_LABELS.items()
+    ]
     details_cache = get_sales_cache_details_map(DB_PATH)
     year_summary = get_sales_year_map(DB_PATH)
     suggestions = {}
@@ -746,17 +804,19 @@ def index():
         "index.html",
         products=products,
         search=search or "",
+        preset=preset,
+        preset_label=PRODUCT_PRESET_LABELS.get(preset, PRODUCT_PRESET_LABELS["all"]),
+        preset_options=preset_options,
         sort=sort,
         order=order,
-        last_pull_at=last_pull_human,
         page=page,
         total_pages=total_pages,
         total_count=total_count,
         limit=limit,
+        dashboard=dashboard,
         suggestions=suggestions,
         suggest_details=suggest_details,
         year_summary=year_summary,
-        suggest_updated_at=format_pull_time(get_setting(DB_PATH, "sales_cache_at") or ""),
         suggest_lead_time_days=lead_time_days,
         suggest_safety_pct=safety_pct,
         sync_status=build_sync_status_payload(),

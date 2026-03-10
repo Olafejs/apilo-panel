@@ -324,6 +324,7 @@ def upsert_product_from_apilo(db_path, product):
 def get_products(
     db_path,
     search=None,
+    preset="all",
     sort="name",
     order="asc",
     limit=50,
@@ -337,6 +338,8 @@ def get_products(
         "quantity": "quantity",
         "suggested": "suggested_qty",
         "shortage": "shortage_qty",
+        "stock_value": "stock_value",
+        "sales_year": "quantity_year",
         "updated": "updated_at",
     }
     sort_col = allowed.get(sort, "name")
@@ -351,56 +354,19 @@ def get_products(
         suggest_days = 30
     if suggest_days < 1:
         suggest_days = 30
-
-    base_query = """
-        SELECT
-            p.*,
-            sc.quantity_30d,
-            scy.quantity_year,
-            scy.orders_year,
-            CASE
-                WHEN sc.quantity_30d IS NULL AND COALESCE(scy.quantity_year, 0) = 0 THEN NULL
-                ELSE CAST(
-                    (
-                        CASE
-                            WHEN COALESCE(sc.quantity_30d, 0) = 0
-                                AND COALESCE(scy.quantity_year, 0) > 0
-                                THEN COALESCE(scy.quantity_year, 0) / 365.0
-                            ELSE COALESCE(sc.quantity_30d, 0) / CAST(? AS REAL)
-                        END
-                    ) * ? * (1 + ? / 100.0) + 0.9999
-                    AS INTEGER
-                )
-            END AS suggested_qty
-        FROM products p
-        LEFT JOIN sales_cache sc ON sc.ean = p.ean
-        LEFT JOIN sales_cache_year scy ON scy.ean = p.ean
-    """
-
-    if search:
-        where_clause = "WHERE p.sku LIKE ? OR p.name LIKE ? OR p.original_code LIKE ? OR p.ean LIKE ?"
-    else:
-        where_clause = ""
-
+    query_base, params = _build_products_scope(
+        search=search,
+        preset=preset,
+        lead_time_days=lead_time_days,
+        safety_pct=safety_pct,
+        suggest_days=suggest_days,
+    )
     query = f"""
-        SELECT
-            base.*,
-            CASE
-                WHEN base.suggested_qty IS NULL THEN NULL
-                ELSE base.suggested_qty - base.quantity
-            END AS shortage_qty
-        FROM (
-            {base_query}
-            {where_clause}
-        ) AS base
+        SELECT *
+        FROM ({query_base}) AS computed
         ORDER BY {order_clause}
         LIMIT ? OFFSET ?
     """
-
-    params = [suggest_days, lead_time_days, safety_pct]
-    if search:
-        like = f"%{search}%"
-        params.extend([like, like, like, like])
     params.extend([limit, offset])
 
     conn = get_db(db_path)
@@ -409,22 +375,122 @@ def get_products(
     return rows
 
 
-def get_products_count(db_path, search=None):
-    conn = get_db(db_path)
+def _build_products_scope(
+    search=None,
+    preset="all",
+    lead_time_days=14,
+    safety_pct=20,
+    suggest_days=30,
+):
+    base_query = """
+        SELECT
+            base.*,
+            CASE
+                WHEN base.suggested_qty IS NULL THEN NULL
+                ELSE base.suggested_qty - COALESCE(base.quantity, 0)
+            END AS shortage_qty,
+            ROUND(
+                COALESCE(base.quantity, 0) * COALESCE(base.allegro_price_with_tax, base.price_with_tax, 0),
+                2
+            ) AS stock_value
+        FROM (
+            SELECT
+                p.*,
+                sc.quantity_30d,
+                scy.quantity_year,
+                scy.orders_year,
+                CASE
+                    WHEN sc.quantity_30d IS NULL AND COALESCE(scy.quantity_year, 0) = 0 THEN NULL
+                    ELSE CAST(
+                        (
+                            CASE
+                                WHEN COALESCE(sc.quantity_30d, 0) = 0
+                                    AND COALESCE(scy.quantity_year, 0) > 0
+                                    THEN COALESCE(scy.quantity_year, 0) / 365.0
+                                ELSE COALESCE(sc.quantity_30d, 0) / CAST(? AS REAL)
+                            END
+                        ) * ? * (1 + ? / 100.0) + 0.9999
+                        AS INTEGER
+                    )
+                END AS suggested_qty
+            FROM products p
+            LEFT JOIN sales_cache sc ON sc.ean = p.ean
+            LEFT JOIN sales_cache_year scy ON scy.ean = p.ean
+        ) AS base
+    """
+    params = [suggest_days, lead_time_days, safety_pct]
+    where_clauses = []
     if search:
         like = f"%{search}%"
-        row = conn.execute(
-            """
-            SELECT COUNT(*) AS count
-            FROM products
-            WHERE sku LIKE ? OR name LIKE ? OR original_code LIKE ? OR ean LIKE ?
-            """,
-            (like, like, like, like),
-        ).fetchone()
-    else:
-        row = conn.execute("SELECT COUNT(*) AS count FROM products").fetchone()
+        where_clauses.append("(sku LIKE ? OR name LIKE ? OR original_code LIKE ? OR ean LIKE ?)")
+        params.extend([like, like, like, like])
+    if preset == "shortage":
+        where_clauses.append("COALESCE(shortage_qty, 0) > 0")
+    elif preset == "out_of_stock":
+        where_clauses.append("COALESCE(quantity, 0) = 0")
+    elif preset == "no_ean":
+        where_clauses.append("(ean IS NULL OR ean = '')")
+    elif preset == "no_image":
+        where_clauses.append("(image_url IS NULL OR image_url = '')")
+    elif preset == "no_sales":
+        where_clauses.append("COALESCE(quantity_year, 0) = 0")
+    elif preset == "high_value":
+        where_clauses.append("COALESCE(stock_value, 0) > 0")
+    where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+    return f"SELECT * FROM ({base_query}) AS computed {where_sql}", params
+
+
+def get_products_count(
+    db_path,
+    search=None,
+    preset="all",
+    lead_time_days=14,
+    safety_pct=20,
+    suggest_days=30,
+):
+    query_base, params = _build_products_scope(
+        search=search,
+        preset=preset,
+        lead_time_days=lead_time_days,
+        safety_pct=safety_pct,
+        suggest_days=suggest_days,
+    )
+    conn = get_db(db_path)
+    row = conn.execute(
+        f"SELECT COUNT(*) AS count FROM ({query_base}) AS computed",
+        tuple(params),
+    ).fetchone()
     conn.close()
     return row["count"] if row else 0
+
+
+def get_dashboard_metrics(db_path, lead_time_days=14, safety_pct=20, suggest_days=30):
+    query_base, params = _build_products_scope(
+        search=None,
+        preset="all",
+        lead_time_days=lead_time_days,
+        safety_pct=safety_pct,
+        suggest_days=suggest_days,
+    )
+    conn = get_db(db_path)
+    row = conn.execute(
+        f"""
+        SELECT
+            COUNT(*) AS total_products,
+            SUM(CASE WHEN COALESCE(shortage_qty, 0) > 0 THEN 1 ELSE 0 END) AS shortage_count,
+            SUM(CASE WHEN COALESCE(shortage_qty, 0) > 0 THEN shortage_qty ELSE 0 END) AS shortage_units,
+            SUM(CASE WHEN COALESCE(quantity, 0) = 0 THEN 1 ELSE 0 END) AS out_of_stock_count,
+            SUM(CASE WHEN ean IS NULL OR ean = '' THEN 1 ELSE 0 END) AS missing_ean_count,
+            SUM(CASE WHEN image_url IS NULL OR image_url = '' THEN 1 ELSE 0 END) AS missing_image_count,
+            SUM(CASE WHEN COALESCE(quantity_year, 0) = 0 THEN 1 ELSE 0 END) AS no_sales_count,
+            SUM(CASE WHEN COALESCE(stock_value, 0) > 0 THEN 1 ELSE 0 END) AS high_value_count,
+            ROUND(COALESCE(SUM(stock_value), 0), 2) AS inventory_value
+        FROM ({query_base}) AS computed
+        """,
+        tuple(params),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else {}
 
 
 def get_product_by_id(db_path, product_id):

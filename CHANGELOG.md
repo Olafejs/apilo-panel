@@ -16,6 +16,20 @@ All important changes should be tracked here together with the application versi
 
 - Additional validation coverage for SMTP fields.
 
+## [1.0.21] - 2026-03-10
+
+### Added
+
+- Added dashboard KPI cards for shortages, zero stock, no-sales products, and total inventory value.
+- Added business preset filters for shortages, zero stock, missing EAN, missing images, no-sales products, and highest-value items.
+
+### Changed
+
+- Improved the main inventory screen layout to make status, filters, and product context easier to scan.
+- Added product badges for yearly sales, stock value, and missing-data warnings.
+- Improved the mobile layout so product rows behave like stacked cards on small screens.
+- Simplified `README.md` into a shorter operational quick-start.
+
 ## [1.0.20] - 2026-03-10
 
 ### Added

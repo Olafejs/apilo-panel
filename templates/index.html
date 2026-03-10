@@ -60,16 +60,52 @@
       {% endif %}
     {% endwith %}
 
+    <section class="dashboard">
+      <a class="metric-card{% if preset == 'shortage' %} active{% endif %}" href="{{ url_for('index', preset='shortage', sort='shortage', order='desc', limit=limit, page=1) }}">
+        <span class="metric-label">Braki</span>
+        <strong class="metric-value">{{ dashboard.shortage_count or 0 }}</strong>
+        <span class="metric-subtle">{{ dashboard.shortage_units or 0 }} szt. do uzupelnienia</span>
+      </a>
+      <a class="metric-card{% if preset == 'out_of_stock' %} active{% endif %}" href="{{ url_for('index', preset='out_of_stock', sort='name', order='asc', limit=limit, page=1) }}">
+        <span class="metric-label">Zero stanu</span>
+        <strong class="metric-value">{{ dashboard.out_of_stock_count or 0 }}</strong>
+        <span class="metric-subtle">produkty bez dostepnego stanu</span>
+      </a>
+      <a class="metric-card{% if preset == 'no_sales' %} active{% endif %}" href="{{ url_for('index', preset='no_sales', sort='sales_year', order='asc', limit=limit, page=1) }}">
+        <span class="metric-label">Bez sprzedazy</span>
+        <strong class="metric-value">{{ dashboard.no_sales_count or 0 }}</strong>
+        <span class="metric-subtle">brak ruchu w ostatnich 12 mies.</span>
+      </a>
+      <a class="metric-card metric-card-accent{% if preset == 'high_value' %} active{% endif %}" href="{{ url_for('index', preset='high_value', sort='stock_value', order='desc', limit=limit, page=1) }}">
+        <span class="metric-label">Wartosc magazynu</span>
+        <strong class="metric-value">{{ dashboard.inventory_value | pln }}</strong>
+        <span class="metric-subtle">{{ dashboard.high_value_count or 0 }} produktow z dodatnia wartoscia</span>
+      </a>
+    </section>
+
+    <section class="preset-bar">
+      {% for option in preset_options %}
+        <a
+          class="filter-pill{% if preset == option.id %} active{% endif %}"
+          href="{{ url_for('index', search=search, preset=option.id, sort=option.sort, order=option.order, limit=limit, page=1) }}"
+        >
+          {{ option.label }}
+          <span>{{ option.count }}</span>
+        </a>
+      {% endfor %}
+    </section>
+
     <section class="filters">
       <form method="get" action="{{ url_for('index') }}">
+        <input type="hidden" name="preset" value="{{ preset }}">
         <input type="text" name="search" placeholder="Szukaj po SKU, nazwie, kodzie" value="{{ search }}">
         <input type="hidden" name="sort" value="{{ sort }}">
         <input type="hidden" name="order" value="{{ order }}">
         <input type="hidden" name="limit" value="{{ limit }}">
         <button class="btn" type="submit">Szukaj</button>
-        <a class="btn outline" href="{{ url_for('index', sort=sort, order=order, limit=limit, page=1) }}">Wyczyść</a>
+        <a class="btn outline" href="{{ url_for('index', preset=preset, sort=sort, order=order, limit=limit, page=1) }}">Wyczysc</a>
       </form>
-      <div class="hint">Wyniki: {{ total_count }}</div>
+      <div class="hint">Widok: {{ preset_label }} · Wyniki: {{ total_count }}</div>
     </section>
 
     <section class="table-wrap">
@@ -77,7 +113,7 @@
         <thead>
           <tr>
             <th>
-              <a class="sort-link" href="{{ url_for('index', search=search, sort='name', order='desc' if sort == 'name' and order == 'asc' else 'asc', limit=limit, page=1) }}">
+              <a class="sort-link" href="{{ url_for('index', search=search, preset=preset, sort='name', order='desc' if sort == 'name' and order == 'asc' else 'asc', limit=limit, page=1) }}">
                 Nazwa
                 <span class="sort-indicator">
                   {% if sort == 'name' %}{{ '▲' if order == 'asc' else '▼' }}{% endif %}
@@ -85,7 +121,7 @@
               </a>
             </th>
             <th>
-              <a class="sort-link" href="{{ url_for('index', search=search, sort='quantity', order='desc' if sort == 'quantity' and order == 'asc' else 'asc', limit=limit, page=1) }}">
+              <a class="sort-link" href="{{ url_for('index', search=search, preset=preset, sort='quantity', order='desc' if sort == 'quantity' and order == 'asc' else 'asc', limit=limit, page=1) }}">
                 Stan
                 <span class="sort-indicator">
                   {% if sort == 'quantity' %}{{ '▲' if order == 'asc' else '▼' }}{% endif %}
@@ -93,7 +129,7 @@
               </a>
             </th>
             <th>
-              <a class="sort-link" href="{{ url_for('index', search=search, sort='shortage', order='desc' if sort == 'shortage' and order == 'asc' else 'asc', limit=limit, page=1) }}">
+              <a class="sort-link" href="{{ url_for('index', search=search, preset=preset, sort='shortage', order='desc' if sort == 'shortage' and order == 'asc' else 'asc', limit=limit, page=1) }}">
                 Sug. stan
                 <span class="sort-indicator">
                   {% if sort == 'shortage' %}{{ '▲' if order == 'asc' else '▼' }}{% endif %}
@@ -105,8 +141,8 @@
         </thead>
         <tbody>
           {% for product in products %}
-          <tr>
-            <td>
+          <tr class="product-row">
+            <td class="primary-cell" data-label="Produkt">
               <div class="product-cell">
                 {% if product["image_url"] %}
                   <span class="thumb-wrap">
@@ -136,23 +172,33 @@
                       -
                     {% endif %}
                   </div>
+                  <div class="product-badges">
+                    <span class="stat-badge">Roczna sprzedaz: <strong>{{ product["quantity_year"] or 0 }}</strong></span>
+                    <span class="stat-badge">Wartosc stanu: <strong>{{ product["stock_value"] | pln }}</strong></span>
+                    {% if not product["ean"] %}
+                      <span class="stat-badge warning">Brak EAN</span>
+                    {% endif %}
+                    {% if not product["image_url"] %}
+                      <span class="stat-badge warning">Brak zdjecia</span>
+                    {% endif %}
+                  </div>
                 </div>
               </div>
             </td>
-            <td class="qty">{{ product["quantity"] if product["quantity"] is not none else "-" }}</td>
+            <td class="qty" data-label="Stan">{{ product["quantity"] if product["quantity"] is not none else "-" }}</td>
             {% set qty_num = product["quantity"] if product["quantity"] is not none else 0 %}
             {% set suggested = suggestions.get(product["ean"]) if product["ean"] else none %}
             {% if suggested is not none %}
               {% set sugg_class = "sugg-ok" if qty_num >= suggested else "sugg-low" %}
-              <td class="qty subtle">
+              <td class="qty subtle" data-label="Sug. stan">
                 <button type="button" class="sugg-pill {{ sugg_class }} toggle-details" data-target="details-{{ product['id'] }}" aria-controls="details-{{ product['id'] }}" aria-expanded="false">
                   {{ suggested }}
                 </button>
               </td>
             {% else %}
-              <td class="qty subtle">-</td>
+              <td class="qty subtle" data-label="Sug. stan">-</td>
             {% endif %}
-            <td>
+            <td class="actions-cell" data-label="Akcje">
               <form method="post" action="{{ url_for('update_quantity', product_id=product['id']) }}" class="inline">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="next" value="{{ request.full_path }}">
@@ -223,6 +269,7 @@
       <div class="table-controls bottom">
         <form method="get" action="{{ url_for('index') }}" class="inline">
           <input type="hidden" name="search" value="{{ search }}">
+          <input type="hidden" name="preset" value="{{ preset }}">
           <input type="hidden" name="sort" value="{{ sort }}">
           <input type="hidden" name="order" value="{{ order }}">
           <label class="select-label">
@@ -238,10 +285,10 @@
         <div class="pagination">
           <span class="page-info">Strona {{ page }} z {{ total_pages }}</span>
           <div class="page-links">
-            <a class="btn outline" href="{{ url_for('index', search=search, sort=sort, order=order, limit=limit, page=1) }}">1</a>
-            <a class="btn outline" href="{{ url_for('index', search=search, sort=sort, order=order, limit=limit, page=page-1 if page > 1 else 1) }}">‹</a>
-            <a class="btn outline" href="{{ url_for('index', search=search, sort=sort, order=order, limit=limit, page=page+1 if page < total_pages else total_pages) }}">›</a>
-            <a class="btn outline" href="{{ url_for('index', search=search, sort=sort, order=order, limit=limit, page=total_pages) }}">{{ total_pages }}</a>
+            <a class="btn outline" href="{{ url_for('index', search=search, preset=preset, sort=sort, order=order, limit=limit, page=1) }}">1</a>
+            <a class="btn outline" href="{{ url_for('index', search=search, preset=preset, sort=sort, order=order, limit=limit, page=page-1 if page > 1 else 1) }}">‹</a>
+            <a class="btn outline" href="{{ url_for('index', search=search, preset=preset, sort=sort, order=order, limit=limit, page=page+1 if page < total_pages else total_pages) }}">›</a>
+            <a class="btn outline" href="{{ url_for('index', search=search, preset=preset, sort=sort, order=order, limit=limit, page=total_pages) }}">{{ total_pages }}</a>
           </div>
         </div>
       </div>
