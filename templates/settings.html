@@ -90,11 +90,21 @@
                 </label>
                 <label>
                   Client Secret
-                  <input type="password" name="apilo_client_secret" value="{{ api.get('apilo_client_secret', '') }}">
+                  <input
+                    type="password"
+                    name="apilo_client_secret"
+                    placeholder="{{ 'Sekret jest już ustawiony. Wpisz nowy, aby podmienić.' if api.get('has_client_secret') else '' }}"
+                    autocomplete="new-password"
+                  >
+                  <span class="field-help">Pozostaw puste, aby zachować obecny sekret.</span>
                 </label>
                 <label>
                   Kod autoryzacji
                   <input type="text" name="apilo_auth_code" placeholder="Wklej kod autoryzacji z Apilo">
+                </label>
+                <label class="checkbox-row full">
+                  <input type="checkbox" name="apilo_client_secret_clear" value="1">
+                  <span>Wyczyść zapisany Client Secret</span>
                 </label>
               </div>
               <div class="action-row">
@@ -260,7 +270,13 @@
               </label>
               <label>
                 SMTP password
-                <input type="password" name="smtp_password" value="{{ email.get('smtp_password', '') }}">
+                <input
+                  type="password"
+                  name="smtp_password"
+                  placeholder="{{ 'Hasło SMTP jest zapisane. Wpisz nowe, aby podmienić.' if email.get('has_smtp_password') else '' }}"
+                  autocomplete="new-password"
+                >
+                <span class="field-help">Pozostaw puste, aby zachować obecne hasło SMTP.</span>
               </label>
               <label>
                 Użyj STARTTLS
@@ -283,6 +299,10 @@
               <label>
                 Odbiorca testowy (To)
                 <input type="text" name="smtp_to" value="{{ email.get('smtp_to', '') }}">
+              </label>
+              <label class="checkbox-row full">
+                <input type="checkbox" name="smtp_password_clear" value="1">
+                <span>Wyczyść zapisane hasło SMTP</span>
               </label>
             </div>
             <div class="action-row">

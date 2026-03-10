@@ -1,3 +1,4 @@
+import ipaddress
 import logging
 import os
 import secrets
@@ -24,6 +25,8 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from apilo import ApiloClient
 from db import (
+    clear_login_attempts,
+    count_recent_login_attempts,
     get_tokens,
     get_products,
     get_products_count,
@@ -38,6 +41,8 @@ from db import (
     set_setting,
     save_sales_cache,
     save_sales_year_cache,
+    prune_login_attempts,
+    record_login_attempt,
     get_base_price_map,
     get_inventory_value_totals,
     get_product_id_maps,
@@ -85,9 +90,29 @@ def parse_float_value(value, default, min_value=None, max_value=None):
     return parsed
 
 
+def parse_bool_value(value, default=False):
+    if value is None:
+        return default
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
+
+
 THUMB_TTL_SECONDS = parse_int_value(os.getenv("THUMB_TTL_SECONDS"), 86400, min_value=0)
 REFRESH_INTERVAL_SECONDS = parse_int_value(
     os.getenv("REFRESH_INTERVAL_SECONDS"), 600, min_value=10
+)
+SESSION_LIFETIME_MINUTES = parse_int_value(
+    os.getenv("SESSION_LIFETIME_MINUTES"), 480, min_value=5, max_value=43200
+)
+LOGIN_RATE_LIMIT_WINDOW_SECONDS = parse_int_value(
+    os.getenv("LOGIN_RATE_LIMIT_WINDOW_SECONDS"), 600, min_value=60, max_value=86400
+)
+LOGIN_RATE_LIMIT_MAX_ATTEMPTS = parse_int_value(
+    os.getenv("LOGIN_RATE_LIMIT_MAX_ATTEMPTS"), 5, min_value=1, max_value=100
+)
+SESSION_COOKIE_SECURE = parse_bool_value(os.getenv("SESSION_COOKIE_SECURE"), default=False)
+APP_SETUP_TOKEN = (os.getenv("APP_SETUP_TOKEN") or "").strip()
+TRUST_X_FORWARDED_FOR = parse_bool_value(
+    os.getenv("TRUST_X_FORWARDED_FOR"), default=False
 )
 
 
@@ -106,6 +131,13 @@ def resolve_flask_secret_key():
 app = Flask(__name__)
 FLASK_SECRET_KEY, FLASK_SECRET_KEY_SOURCE = resolve_flask_secret_key()
 app.secret_key = FLASK_SECRET_KEY
+app.config.update(
+    PERMANENT_SESSION_LIFETIME=timedelta(minutes=SESSION_LIFETIME_MINUTES),
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=SESSION_COOKIE_SECURE,
+    SESSION_COOKIE_NAME="apilo_session",
+)
 APP_PASSWORD = os.getenv("APP_PASSWORD")
 SYNC_LOCK = threading.Lock()
 
@@ -231,6 +263,51 @@ def public_error_message(exc, default="Wystąpił błąd."):
     return default
 
 
+def get_client_ip():
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    if TRUST_X_FORWARDED_FOR and forwarded:
+        client_ip = forwarded.split(",")[0].strip()
+        if client_ip:
+            return client_ip
+    return request.remote_addr or "unknown"
+
+
+def is_local_setup_request():
+    client_ip = get_client_ip()
+    if client_ip in {"127.0.0.1", "::1", "::ffff:127.0.0.1"}:
+        return True
+    try:
+        parsed_ip = ipaddress.ip_address(client_ip)
+    except ValueError:
+        return False
+    if isinstance(parsed_ip, ipaddress.IPv4Address):
+        private_gateway_ranges = (
+            ipaddress.ip_network("172.16.0.0/12"),
+            ipaddress.ip_network("192.168.0.0/16"),
+        )
+        return any(parsed_ip in network for network in private_gateway_ranges) and client_ip.endswith(
+            ".1"
+        )
+    return False
+
+
+def login_window_start_iso():
+    return (datetime.now(timezone.utc) - timedelta(seconds=LOGIN_RATE_LIMIT_WINDOW_SECONDS)).isoformat()
+
+
+def is_login_rate_limited(client_ip):
+    if not client_ip or client_ip == "unknown":
+        return False
+    window_start = login_window_start_iso()
+    prune_login_attempts(DB_PATH, window_start)
+    attempts = count_recent_login_attempts(DB_PATH, client_ip, window_start)
+    return attempts >= LOGIN_RATE_LIMIT_MAX_ATTEMPTS
+
+
+def setup_token_required():
+    return bool(APP_SETUP_TOKEN) and not is_local_setup_request()
+
+
 def run_sync_pull_with_lock(blocking):
     acquired = SYNC_LOCK.acquire(blocking=blocking)
     if not acquired:
@@ -296,11 +373,30 @@ def password_missing():
     return get_setting(DB_PATH, "password_hash") is None
 
 
+def render_setup_password(status_code=200):
+    return (
+        render_template(
+            "setup_password.html",
+            require_setup_token=setup_token_required(),
+            remote_setup_blocked=(not APP_SETUP_TOKEN and not is_local_setup_request()),
+        ),
+        status_code,
+    )
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if password_missing():
         return redirect(url_for("setup_password"))
     if request.method == "POST":
+        client_ip = get_client_ip()
+        if is_login_rate_limited(client_ip):
+            app.logger.warning("Blocked login by rate limit ip=%s path=%s", client_ip, request.path)
+            flash(
+                "Za dużo nieudanych prób logowania. Odczekaj kilka minut i spróbuj ponownie.",
+                "error",
+            )
+            return render_template("login.html"), 429
         password = request.form.get("password")
         if APP_PASSWORD:
             valid = password and password == APP_PASSWORD
@@ -310,15 +406,18 @@ def login():
                 password_hash, password
             )
         if valid:
+            if client_ip and client_ip != "unknown":
+                clear_login_attempts(DB_PATH, client_ip)
             session.clear()
+            session.permanent = True
             session["logged_in"] = True
+            session["logged_in_at"] = utc_now_iso()
             dest = request.args.get("next")
             if not is_safe_redirect_target(dest):
                 dest = url_for("index")
             return redirect(dest)
-        client_ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
-        if not client_ip:
-            client_ip = request.remote_addr or "unknown"
+        if client_ip and client_ip != "unknown":
+            record_login_attempt(DB_PATH, client_ip)
         app.logger.warning("Failed login attempt ip=%s path=%s", client_ip, request.path)
         flash("Nieprawidłowe hasło.", "error")
     return render_template("login.html")
@@ -329,18 +428,39 @@ def setup_password():
     if not password_missing():
         return redirect(url_for("login"))
     if request.method == "POST":
+        client_ip = get_client_ip()
+        if setup_token_required():
+            provided_setup_token = request.form.get("setup_token") or ""
+            if not secrets.compare_digest(provided_setup_token, APP_SETUP_TOKEN):
+                app.logger.warning("Blocked password setup with invalid token ip=%s", client_ip)
+                flash("Nieprawidłowy token konfiguracji.", "error")
+                return render_setup_password()
+        elif not is_local_setup_request():
+            app.logger.warning("Blocked remote password setup ip=%s", client_ip)
+            flash(
+                "Pierwsze ustawienie hasła jest dozwolone tylko lokalnie lub z tokenem konfiguracji.",
+                "error",
+            )
+            return render_setup_password(status_code=403)
         password = request.form.get("password")
         confirm = request.form.get("confirm")
         if not password or len(password) < 8:
             flash("Hasło musi mieć minimum 8 znaków.", "error")
-            return render_template("setup_password.html")
+            return render_setup_password()
         if password != confirm:
             flash("Hasła nie są zgodne.", "error")
-            return render_template("setup_password.html")
+            return render_setup_password()
         set_setting(DB_PATH, "password_hash", generate_password_hash(password))
         flash("Hasło ustawione. Zaloguj się.", "success")
         return redirect(url_for("login"))
-    return render_template("setup_password.html")
+    if not APP_SETUP_TOKEN and not is_local_setup_request():
+        app.logger.warning("Blocked remote password setup form ip=%s", get_client_ip())
+        flash(
+            "Pierwsze ustawienie hasła jest dozwolone tylko lokalnie lub z tokenem konfiguracji.",
+            "error",
+        )
+        return render_setup_password(status_code=403)
+    return render_setup_password()
 
 
 @app.post("/logout")
@@ -455,19 +575,29 @@ def settings():
     if request.method == "POST":
         action = request.form.get("action")
         if action == "email":
+            smtp_password = request.form.get("smtp_password")
+            clear_smtp_password = request.form.get("smtp_password_clear") == "1"
             set_setting(DB_PATH, "smtp_host", request.form.get("smtp_host") or "")
             set_setting(DB_PATH, "smtp_port", request.form.get("smtp_port") or "")
             set_setting(DB_PATH, "smtp_user", request.form.get("smtp_user") or "")
-            set_setting(DB_PATH, "smtp_password", request.form.get("smtp_password") or "")
+            if clear_smtp_password:
+                set_setting(DB_PATH, "smtp_password", "")
+            elif smtp_password:
+                set_setting(DB_PATH, "smtp_password", smtp_password)
             set_setting(DB_PATH, "smtp_use_tls", request.form.get("smtp_use_tls") or "0")
             set_setting(DB_PATH, "smtp_use_ssl", request.form.get("smtp_use_ssl") or "0")
             set_setting(DB_PATH, "smtp_from", request.form.get("smtp_from") or "")
             set_setting(DB_PATH, "smtp_to", request.form.get("smtp_to") or "")
             flash("Ustawienia email zapisane.", "success")
         elif action == "api":
+            api_client_secret = request.form.get("apilo_client_secret")
+            clear_api_client_secret = request.form.get("apilo_client_secret_clear") == "1"
             set_setting(DB_PATH, "apilo_base_url", request.form.get("apilo_base_url") or "")
             set_setting(DB_PATH, "apilo_client_id", request.form.get("apilo_client_id") or "")
-            set_setting(DB_PATH, "apilo_client_secret", request.form.get("apilo_client_secret") or "")
+            if clear_api_client_secret:
+                set_setting(DB_PATH, "apilo_client_secret", "")
+            elif api_client_secret:
+                set_setting(DB_PATH, "apilo_client_secret", api_client_secret)
             auth_code = request.form.get("apilo_auth_code") or ""
             if auth_code:
                 try:
@@ -559,7 +689,7 @@ def settings():
         "smtp_host": get_setting(DB_PATH, "smtp_host") or "",
         "smtp_port": get_setting(DB_PATH, "smtp_port") or "",
         "smtp_user": get_setting(DB_PATH, "smtp_user") or "",
-        "smtp_password": get_setting(DB_PATH, "smtp_password") or "",
+        "has_smtp_password": bool(get_setting(DB_PATH, "smtp_password")),
         "smtp_use_tls": get_setting(DB_PATH, "smtp_use_tls") or "0",
         "smtp_use_ssl": get_setting(DB_PATH, "smtp_use_ssl") or "0",
         "smtp_from": get_setting(DB_PATH, "smtp_from") or "",
@@ -568,16 +698,16 @@ def settings():
     api_settings = {
         "apilo_base_url": get_setting(DB_PATH, "apilo_base_url") or "",
         "apilo_client_id": get_setting(DB_PATH, "apilo_client_id") or "",
-        "apilo_client_secret": get_setting(DB_PATH, "apilo_client_secret") or "",
+        "has_client_secret": bool(get_config_value("APILO_CLIENT_SECRET", "apilo_client_secret")),
     }
     allegro_settings = {
         "allegro_price_list_id": str(get_allegro_price_list_id()),
     }
     api_status = {
         "config_ok": bool(
-            api_settings["apilo_base_url"]
-            and api_settings["apilo_client_id"]
-            and api_settings["apilo_client_secret"]
+            get_config_value("APILO_BASE_URL", "apilo_base_url", "")
+            and get_config_value("APILO_CLIENT_ID", "apilo_client_id", "")
+            and get_config_value("APILO_CLIENT_SECRET", "apilo_client_secret", "")
         ),
         "tokens_ok": not tokens_missing(),
         "test_status": get_setting(DB_PATH, "api_test_status") or "",
@@ -945,6 +1075,33 @@ def start_background_refresh(debug_mode):
     if os.getenv("WERKZEUG_RUN_MAIN") == "true" or not debug_mode:
         thread = threading.Thread(target=background_refresh_loop, daemon=True)
         thread.start()
+
+
+@app.after_request
+def add_security_headers(response):
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault(
+        "Permissions-Policy",
+        "camera=(), geolocation=(), microphone=()",
+    )
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'self'; "
+        "img-src 'self' data: https:; "
+        "style-src 'self' 'unsafe-inline'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "connect-src 'self'; "
+        "font-src 'self' data:; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'; "
+        "frame-ancestors 'none'",
+    )
+    if request.endpoint in {"login", "setup_password"}:
+        response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @app.context_processor

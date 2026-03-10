@@ -127,13 +127,24 @@ APILO_DB_PATH=apilo.sqlite3
 APILO_BASE_URL=
 APILO_CLIENT_ID=
 APILO_CLIENT_SECRET=
+APP_SETUP_TOKEN=
 
 THUMB_TTL_SECONDS=86400
 REFRESH_INTERVAL_SECONDS=600
+SESSION_COOKIE_SECURE=0
+SESSION_LIFETIME_MINUTES=480
+LOGIN_RATE_LIMIT_MAX_ATTEMPTS=5
+LOGIN_RATE_LIMIT_WINDOW_SECONDS=600
+TRUST_X_FORWARDED_FOR=0
 ```
 
 Jesli konfigurujesz API z poziomu panelu (`Ustawienia -> Dane API Apilo`), zostaw pola `APILO_*` puste w `.env`.  
 Wartosci z `.env` maja priorytet nad ustawieniami zapisanymi w panelu.
+
+## Bezpieczenstwo pierwszego uruchomienia
+- Najbezpieczniej ustawic `APP_PASSWORD` od razu w `.env`.
+- Jesli `APP_PASSWORD` jest puste, pierwsze ustawienie hasla bez `APP_SETUP_TOKEN` jest dozwolone tylko przez `localhost`.
+- Jesli chcesz ustawic haslo zdalnie, ustaw tymczasowo `APP_SETUP_TOKEN`, uzyj go na ekranie pierwszej konfiguracji, a potem usun z `.env`.
 
 ## Skad wziac dane API Apilo
 1. Zaloguj sie do swojego panelu Apilo i wejdz na:

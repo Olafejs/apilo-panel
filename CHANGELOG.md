@@ -16,6 +16,27 @@ All important changes should be tracked here together with the application versi
 
 - Additional validation coverage for SMTP fields.
 
+## [1.0.17] - 2026-03-10
+
+### Added
+
+- Added SQLite-backed login attempt tracking for rate limiting.
+- Added `APP_SETUP_TOKEN`, `SESSION_LIFETIME_MINUTES`, `SESSION_COOKIE_SECURE`, `LOGIN_RATE_LIMIT_MAX_ATTEMPTS`, and `LOGIN_RATE_LIMIT_WINDOW_SECONDS` environment options.
+
+### Changed
+
+- Hardened Flask session cookie settings and enabled timed sessions.
+- Stopped rendering stored API and SMTP secrets back into the settings form.
+- Preserved stored API/SMTP secrets when the related password field is left empty.
+- Documented safer first-run password setup in `README.md` and `.env.example`.
+
+### Fixed
+
+- Blocked remote first-password setup unless the request comes from localhost or uses a valid setup token.
+- Added login rate limiting with logged blocking events after repeated failed attempts.
+- Added standard security response headers for browser hardening.
+- Stopped trusting `X-Forwarded-For` by default unless explicitly enabled in the environment.
+
 ## [1.0.16] - 2026-03-10
 
 ### Added

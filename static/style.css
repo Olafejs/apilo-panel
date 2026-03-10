@@ -700,6 +700,19 @@ tbody tr.dirty {
   font-weight: 600;
 }
 
+.stack label.checkbox-row {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  font-weight: 500;
+}
+
+.stack label.checkbox-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
 .stack input[type="text"],
 .stack input[type="password"],
 .stack input[type="number"],

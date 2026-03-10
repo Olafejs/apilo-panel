@@ -89,12 +89,24 @@ def init_db(db_path):
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS login_attempts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ip_address TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_products_name ON products(name)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_products_ean ON products(ean)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_products_apilo_id ON products(apilo_id)")
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_products_original_code ON products(original_code)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_login_attempts_ip_created ON login_attempts(ip_address, created_at)"
         )
     _ensure_column(db_path, "products", "ean", "TEXT")
     _ensure_column(db_path, "products", "image_url", "TEXT")
@@ -654,6 +666,44 @@ def update_product_quantity(db_path, product_id, quantity):
             """,
             (quantity, quantity, now, now, product_id),
         )
+    conn.close()
+
+
+def prune_login_attempts(db_path, before_iso):
+    conn = get_db(db_path)
+    with conn:
+        conn.execute("DELETE FROM login_attempts WHERE created_at < ?", (before_iso,))
+    conn.close()
+
+
+def count_recent_login_attempts(db_path, ip_address, since_iso):
+    conn = get_db(db_path)
+    row = conn.execute(
+        """
+        SELECT COUNT(*) AS count
+        FROM login_attempts
+        WHERE ip_address = ? AND created_at >= ?
+        """,
+        (ip_address, since_iso),
+    ).fetchone()
+    conn.close()
+    return row["count"] if row else 0
+
+
+def record_login_attempt(db_path, ip_address):
+    conn = get_db(db_path)
+    with conn:
+        conn.execute(
+            "INSERT INTO login_attempts (ip_address, created_at) VALUES (?, ?)",
+            (ip_address, utc_now_iso()),
+        )
+    conn.close()
+
+
+def clear_login_attempts(db_path, ip_address):
+    conn = get_db(db_path)
+    with conn:
+        conn.execute("DELETE FROM login_attempts WHERE ip_address = ?", (ip_address,))
     conn.close()
 
 
