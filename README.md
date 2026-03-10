@@ -98,13 +98,15 @@ cd "/sciezka/do/apilo-panel"
 docker compose up -d --build
 ```
 
-Build zaleznosci w tym repo uzywa `network: host`, bo na tym serwerze zwykly Docker `bridge` nie ma stabilnego wyjscia do PyPI podczas `pip install`, mimo ze host ma internet.
+Build i runtime kontenera w tym repo uzywaja sieci hosta, bo na tym serwerze zwykly Docker `bridge` nie ma stabilnego wyjscia do PyPI i API Apilo, mimo ze host ma internet.
 
 3. Otworz w przegladarce:
 
 ```text
 http://127.0.0.1:5080
 ```
+
+Poniewaz kontener dziala z `network_mode: host`, aplikacja nasluchuje bezposrednio na porcie hosta `5080`.
 
 4. Dane runtime sa zapisywane lokalnie w:
    - `data/db`

@@ -6,8 +6,7 @@ services:
       network: host
     container_name: apilo-panel
     restart: unless-stopped
-    ports:
-      - "5080:5080"
+    network_mode: host
     environment:
       TZ: Europe/Warsaw
       FLASK_DEBUG: "0"

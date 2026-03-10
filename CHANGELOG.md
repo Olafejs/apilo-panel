@@ -16,6 +16,17 @@ All important changes should be tracked here together with the application versi
 
 - Additional validation coverage for SMTP fields.
 
+## [1.0.19] - 2026-03-10
+
+### Changed
+
+- Switched the Docker Compose runtime back to `network_mode: host` because the server's default Docker bridge cannot reliably reach external HTTPS endpoints.
+
+### Fixed
+
+- Restored outbound connectivity from the running container to Apilo API after the port-published bridge setup caused connection timeouts.
+- Clarified in `README.md` that both build and runtime use host networking on this server.
+
 ## [1.0.18] - 2026-03-10
 
 ### Changed
