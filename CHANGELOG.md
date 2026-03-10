@@ -16,6 +16,17 @@ All important changes should be tracked here together with the application versi
 
 - Additional validation coverage for SMTP fields.
 
+## [1.0.18] - 2026-03-10
+
+### Changed
+
+- Docker Compose now builds with host networking to avoid package-download failures when the default Docker bridge cannot reach PyPI.
+- Docker image builds now use longer pip timeouts and retries for more resilient dependency installation.
+
+### Fixed
+
+- Documented the Docker build-network workaround in `README.md`.
+
 ## [1.0.17] - 2026-03-10
 
 ### Added

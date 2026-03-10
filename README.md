@@ -98,6 +98,8 @@ cd "/sciezka/do/apilo-panel"
 docker compose up -d --build
 ```
 
+Build zaleznosci w tym repo uzywa `network: host`, bo na tym serwerze zwykly Docker `bridge` nie ma stabilnego wyjscia do PyPI podczas `pip install`, mimo ze host ma internet.
+
 3. Otworz w przegladarce:
 
 ```text
@@ -113,6 +115,12 @@ Zatrzymanie:
 
 ```bash
 docker compose down
+```
+
+Jesli chcesz zbudowac obraz recznie poza Compose, uzyj:
+
+```bash
+docker build --network host -t apilo-panel .
 ```
 
 ## Konfiguracja
