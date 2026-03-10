@@ -23,10 +23,25 @@
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button class="btn" type="submit">Pobierz z Apilo</button>
         </form>
-        <div class="refresh-chip">
-          Ostatnie odświeżenie: <strong id="last-refresh">{{ last_pull_at or now_human }}</strong>
+        <div
+          class="refresh-chip sync-chip"
+          id="sync-status"
+          data-status-url="{{ url_for('sync_status') }}"
+          data-next-inventory-sync-at="{{ sync_status.next_inventory_sync_at }}"
+          data-next-sales-refresh-at="{{ sync_status.next_sales_refresh_at }}"
+        >
+          Magazyn: <strong id="last-refresh">{{ sync_status.last_inventory_sync_at or '-' }}</strong>
           <span class="divider">·</span>
-          Kolejne za <strong id="refresh-count">{{ refresh_interval_seconds }}</strong>s
+          Sugestie: <strong id="sales-refresh">{{ sync_status.last_sales_refresh_at or '-' }}</strong>
+          <span class="divider">·</span>
+          <span
+            class="sync-state{% if sync_status.running %} running{% elif sync_status.last_error %} error{% endif %}"
+            id="sync-state"
+          >{{ sync_status.state_label }}</span>
+          <span class="divider">·</span>
+          Magazyn za <strong id="inventory-refresh-count">-</strong>s
+          <span class="divider">·</span>
+          Sugestie za <strong id="sales-refresh-count">-</strong>s
         </div>
         <form method="post" action="{{ url_for('logout') }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -95,7 +110,13 @@
               <div class="product-cell">
                 {% if product["image_url"] %}
                   <span class="thumb-wrap">
-                    <img class="thumb" src="{{ url_for('thumb', apilo_id=product['apilo_id']) }}" alt="{{ product['name'] or 'Miniatura produktu' }}">
+                    <img
+                      class="thumb"
+                      src="{{ url_for('thumb', apilo_id=product['apilo_id']) }}"
+                      alt="{{ product['name'] or 'Miniatura produktu' }}"
+                      loading="lazy"
+                      decoding="async"
+                    >
                   </span>
                 {% endif %}
                 <div>
@@ -231,39 +252,70 @@
     </div>
     <script>
       (function () {
-        var remaining = {{ refresh_interval_seconds }};
-        var el = document.getElementById("refresh-count");
-        var isUserEditing = function () {
-          var active = document.activeElement;
-          if (!active) {
-            return false;
+        var root = document.getElementById("sync-status");
+        if (!root) {
+          return;
+        }
+        var lastRefreshEl = document.getElementById("last-refresh");
+        var salesRefreshEl = document.getElementById("sales-refresh");
+        var inventoryCountdownEl = document.getElementById("inventory-refresh-count");
+        var salesCountdownEl = document.getElementById("sales-refresh-count");
+        var stateEl = document.getElementById("sync-state");
+        var statusUrl = root.dataset.statusUrl;
+        var nextInventorySyncAt = root.dataset.nextInventorySyncAt || "";
+        var nextSalesRefreshAt = root.dataset.nextSalesRefreshAt || "";
+        var secondsUntil = function (isoValue) {
+          if (!isoValue) {
+            return "-";
           }
-          var tag = (active.tagName || "").toLowerCase();
-          if (tag === "input" || tag === "select" || tag === "textarea") {
-            return true;
+          var parsed = Date.parse(isoValue);
+          if (Number.isNaN(parsed)) {
+            return "-";
           }
-          return active.isContentEditable === true;
+          var diff = Math.ceil((parsed - Date.now()) / 1000);
+          return String(Math.max(diff, 0));
         };
-        var tick = function () {
-          if (isUserEditing()) {
+        var renderCountdowns = function () {
+          inventoryCountdownEl.textContent = secondsUntil(nextInventorySyncAt);
+          salesCountdownEl.textContent = secondsUntil(nextSalesRefreshAt);
+        };
+        var applyStatus = function (payload) {
+          if (!payload) {
             return;
           }
-          remaining -= 1;
-          if (remaining <= 0) {
-            var csrf = document.querySelector("meta[name='csrf-token']").content;
-            fetch("{{ url_for('sync_pull') }}", {
-              method: "POST",
-              headers: { "X-CSRF-Token": csrf }
+          nextInventorySyncAt = payload.next_inventory_sync_at || "";
+          nextSalesRefreshAt = payload.next_sales_refresh_at || "";
+          lastRefreshEl.textContent = payload.last_inventory_sync_at || "-";
+          salesRefreshEl.textContent = payload.last_sales_refresh_at || "-";
+          stateEl.textContent = payload.state_label || "Auto-sync aktywny";
+          stateEl.className = "sync-state";
+          if (payload.running) {
+            stateEl.classList.add("running");
+          } else if (payload.last_error) {
+            stateEl.classList.add("error");
+          }
+          renderCountdowns();
+        };
+        var pollStatus = function () {
+          fetch(statusUrl, {
+            headers: { "Accept": "application/json" },
+            cache: "no-store"
+          })
+            .then(function (response) {
+              if (!response.ok) {
+                throw new Error("status");
+              }
+              return response.json();
             })
-              .then(function () { window.location.reload(); })
-              .catch(function () { window.location.reload(); });
-            return;
-          }
-          if (el) {
-            el.textContent = String(remaining);
-          }
+            .then(applyStatus)
+            .catch(function () {
+              stateEl.textContent = "Brak odświeżenia statusu";
+              stateEl.className = "sync-state error";
+            });
         };
-        setInterval(tick, 1000);
+        renderCountdowns();
+        setInterval(renderCountdowns, 1000);
+        setInterval(pollStatus, 15000);
       })();
       (function () {
         var buttons = document.querySelectorAll(".toggle-details");

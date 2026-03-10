@@ -16,6 +16,25 @@ All important changes should be tracked here together with the application versi
 
 - Additional validation coverage for SMTP fields.
 
+## [1.0.20] - 2026-03-10
+
+### Added
+
+- Added a `/sync/status` endpoint and live sync status indicators on the main screen.
+- Added separate environment controls for inventory sync cadence, sales-cache cadence, yearly sales-cache cadence, and thumbnail download limits.
+
+### Changed
+
+- Split background refresh into separate inventory and sales-cache jobs to avoid recalculating sales suggestions on every product pull.
+- Replaced one-shot `requests` calls in the Apilo client with a shared retrying `requests.Session`.
+- Stopped the browser from auto-triggering `POST /sync/pull` followed by a full page reload.
+- Enabled lazy thumbnail loading in the product list.
+
+### Fixed
+
+- Reduced repeated heavy yearly sales recalculations by refreshing the yearly cache only when it is stale or explicitly requested.
+- Limited thumbnail downloads by timeout and maximum size while keeping stale cached images as fallback.
+
 ## [1.0.19] - 2026-03-10
 
 ### Changed

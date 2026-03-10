@@ -4,12 +4,36 @@ import threading
 from datetime import datetime, timedelta, timezone
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from db import get_tokens, save_tokens
 
 
 ACCESS_TOKEN_MARGIN_SECONDS = 30
 REFRESH_TOKEN_MARGIN_SECONDS = 60
+DEFAULT_RETRY_TOTAL = 3
+DEFAULT_RETRY_BACKOFF_SECONDS = 0.5
+DEFAULT_RETRY_STATUS_CODES = (429, 500, 502, 503, 504)
+
+
+def build_retry_session():
+    retry = Retry(
+        total=DEFAULT_RETRY_TOTAL,
+        connect=DEFAULT_RETRY_TOTAL,
+        read=DEFAULT_RETRY_TOTAL,
+        status=DEFAULT_RETRY_TOTAL,
+        backoff_factor=DEFAULT_RETRY_BACKOFF_SECONDS,
+        status_forcelist=DEFAULT_RETRY_STATUS_CODES,
+        allowed_methods=frozenset({"GET", "HEAD", "OPTIONS", "POST"}),
+        raise_on_status=False,
+    )
+    adapter = HTTPAdapter(max_retries=retry, pool_connections=20, pool_maxsize=20)
+    session = requests.Session()
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    session.headers.update({"User-Agent": "apilo-panel/1.0"})
+    return session
 
 
 class ApiloClientError(RuntimeError):
@@ -40,6 +64,9 @@ def is_expired(iso_value, margin_seconds=0):
 
 
 class ApiloClient:
+    _shared_session = None
+    _shared_session_lock = threading.Lock()
+
     def __init__(
         self,
         base_url,
@@ -60,6 +87,15 @@ class ApiloClient:
         self.auth_token = auth_token
         self.timeout = timeout
         self._token_lock = threading.Lock()
+        self.session = self._get_shared_session()
+
+    @classmethod
+    def _get_shared_session(cls):
+        if cls._shared_session is None:
+            with cls._shared_session_lock:
+                if cls._shared_session is None:
+                    cls._shared_session = build_retry_session()
+        return cls._shared_session
 
     def _basic_auth_header(self):
         raw = f"{self.client_id}:{self.client_secret}".encode("utf-8")
@@ -146,7 +182,7 @@ class ApiloClient:
             "Authorization": f"Basic {self._basic_auth_header()}",
         }
         try:
-            response = requests.post(
+            response = self.session.post(
                 url, headers=headers, data=json.dumps(payload), timeout=self.timeout
             )
         except requests.RequestException as exc:
@@ -168,7 +204,7 @@ class ApiloClient:
 
     def _send_request(self, method, url, headers, params, json_body):
         try:
-            return requests.request(
+            return self.session.request(
                 method,
                 url,
                 headers=headers,

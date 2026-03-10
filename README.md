@@ -140,13 +140,22 @@ APILO_CLIENT_SECRET=
 APP_SETUP_TOKEN=
 
 THUMB_TTL_SECONDS=86400
+THUMB_DOWNLOAD_TIMEOUT_SECONDS=10
+THUMB_MAX_DOWNLOAD_BYTES=2000000
 REFRESH_INTERVAL_SECONDS=600
+SALES_CACHE_REFRESH_INTERVAL_SECONDS=1800
+SALES_YEAR_REFRESH_INTERVAL_SECONDS=21600
 SESSION_COOKIE_SECURE=0
 SESSION_LIFETIME_MINUTES=480
 LOGIN_RATE_LIMIT_MAX_ATTEMPTS=5
 LOGIN_RATE_LIMIT_WINDOW_SECONDS=600
 TRUST_X_FORWARDED_FOR=0
 ```
+
+Automatyczne odswiezanie dziala teraz w dwoch krokach:
+- `REFRESH_INTERVAL_SECONDS` synchronizuje produkty, ceny i aukcje z Apilo.
+- `SALES_CACHE_REFRESH_INTERVAL_SECONDS` odswieza cache sprzedazy dla sugestii stanow.
+- `SALES_YEAR_REFRESH_INTERVAL_SECONDS` ogranicza, jak czesto liczony jest ciezszy roczny cache sprzedazy.
 
 Jesli konfigurujesz API z poziomu panelu (`Ustawienia -> Dane API Apilo`), zostaw pola `APILO_*` puste w `.env`.  
 Wartosci z `.env` maja priorytet nad ustawieniami zapisanymi w panelu.
