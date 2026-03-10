@@ -85,6 +85,36 @@ bash start.sh
 http://127.0.0.1:5000
 ```
 
+### Docker Compose
+1. Wejdz do folderu projektu:
+
+```bash
+cd "/sciezka/do/apilo-panel"
+```
+
+2. Zbuduj i uruchom kontener:
+
+```bash
+docker compose up -d --build
+```
+
+3. Otworz w przegladarce:
+
+```text
+http://127.0.0.1:5080
+```
+
+4. Dane runtime sa zapisywane lokalnie w:
+   - `data/db`
+   - `data/logs`
+   - `data/thumbs`
+
+Zatrzymanie:
+
+```bash
+docker compose down
+```
+
 ## Konfiguracja
 
 Przykladowy `.env`:

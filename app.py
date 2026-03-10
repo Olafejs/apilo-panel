@@ -117,6 +117,8 @@ logging.basicConfig(
         logging.StreamHandler(),
     ],
 )
+app.logger.setLevel(logging.INFO)
+app.logger.propagate = True
 if FLASK_SECRET_KEY_SOURCE == "generated":
     logging.getLogger(__name__).warning(
         "FLASK_SECRET_KEY nie ustawiony. Wygenerowano klucz i zapisano w settings (flask_secret_key)."
@@ -314,6 +316,10 @@ def login():
             if not is_safe_redirect_target(dest):
                 dest = url_for("index")
             return redirect(dest)
+        client_ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+        if not client_ip:
+            client_ip = request.remote_addr or "unknown"
+        app.logger.warning("Failed login attempt ip=%s path=%s", client_ip, request.path)
         flash("Nieprawidłowe hasło.", "error")
     return render_template("login.html")
 
@@ -1058,5 +1064,7 @@ def thumb(apilo_id):
 
 if __name__ == "__main__":
     debug_mode = os.getenv("FLASK_DEBUG") == "1"
+    app_host = os.getenv("APP_HOST", "127.0.0.1")
+    app_port = parse_int_value(os.getenv("APP_PORT"), 5000, min_value=1, max_value=65535)
     start_background_refresh(debug_mode)
-    app.run(debug=debug_mode, use_reloader=debug_mode)
+    app.run(host=app_host, port=app_port, debug=debug_mode, use_reloader=debug_mode)

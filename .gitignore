@@ -18,6 +18,7 @@ venv/
 .env.local
 
 # Runtime data and generated files
+data/
 logs/
 static/thumbs/
 *.log

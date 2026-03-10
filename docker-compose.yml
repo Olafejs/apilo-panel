@@ -1,0 +1,19 @@
+services:
+  apilo-panel:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: apilo-panel
+    restart: unless-stopped
+    ports:
+      - "5080:5080"
+    environment:
+      TZ: Europe/Warsaw
+      FLASK_DEBUG: "0"
+      APP_HOST: "0.0.0.0"
+      APP_PORT: "5080"
+      APILO_DB_PATH: "/app/data/apilo.sqlite3"
+    volumes:
+      - ./data/db:/app/data
+      - ./data/logs:/app/logs
+      - ./data/thumbs:/app/static/thumbs

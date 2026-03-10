@@ -1,0 +1,13 @@
+.git
+.gitignore
+.env
+.env.local
+.venv
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+data/
+logs/
+static/thumbs/

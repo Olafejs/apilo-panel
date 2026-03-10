@@ -16,6 +16,25 @@ All important changes should be tracked here together with the application versi
 
 - Additional validation coverage for SMTP fields.
 
+## [1.0.16] - 2026-03-10
+
+### Added
+
+- Added Docker deployment files: `Dockerfile`, `docker-compose.yml`, and `.dockerignore`.
+
+### Changed
+
+- Added configurable app host/port support through `APP_HOST` and `APP_PORT`.
+- Documented Docker Compose startup in `README.md`.
+- Switched Docker Compose to explicit port publishing on `5080` instead of host network mode.
+- Updated `.gitignore` to ignore local `data/` runtime state.
+- Enabled explicit app logger propagation for container and service logs.
+
+### Fixed
+
+- Excluded `.env` files from Docker build context to avoid baking local secrets into the image.
+- Added failed-login IP logging for easier operational monitoring.
+
 ## [1.0.15] - 2026-02-28
 
 ### Changed
