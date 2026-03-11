@@ -16,6 +16,18 @@ All important changes should be tracked here together with the application versi
 
 - Additional validation coverage for SMTP fields.
 
+## [1.0.29] - 2026-03-11
+
+### Added
+
+- Added route-level tests for CSRF rejection, remote password setup blocking, and the health endpoint.
+- Added database-level tests for encrypted secret storage, token migration, and unbounded filtered product queries.
+
+### Changed
+
+- Refactored the main product-list route so CSV export and list filtering use shared helper functions instead of duplicated logic.
+- Split route and database checks into separate pytest modules for easier maintenance.
+
 ## [1.0.28] - 2026-03-11
 
 ### Added

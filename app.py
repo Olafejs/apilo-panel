@@ -191,6 +191,26 @@ PRODUCT_PRESET_LABELS = {
     "no_sales": "Bez sprzedazy",
     "high_value": "Najwyzsza wartosc",
 }
+PRODUCT_PAGE_LIMITS = (25, 50, 100, 200)
+PRODUCT_EXPORT_COLUMNS = (
+    "Apilo ID",
+    "SKU",
+    "Kod oryginalny",
+    "Nazwa",
+    "EAN",
+    "Stan",
+    "Sug. stan",
+    "Brak",
+    "Sprzedaz 30d",
+    "Sprzedaz 365d",
+    "Zamowienia 365d",
+    "Cena sklepowa brutto",
+    "Cena Allegro brutto",
+    "Wartosc stanu",
+    "Allegro ID",
+    "URL zdjecia",
+    "Aktualizacja",
+)
 LOW_STOCK_ALERT_ROW_LIMIT = 200
 
 logging.basicConfig(
@@ -324,6 +344,107 @@ def default_sort_for_preset(preset):
     if preset in {"out_of_stock", "no_ean", "no_image"}:
         return "name", "asc"
     return "shortage", "desc"
+
+
+def normalize_sort_order(value, default):
+    return value if value in {"asc", "desc"} else default
+
+
+def build_product_list_state(args):
+    search = args.get("search")
+    preset = normalize_product_preset(args.get("preset") or "all")
+    default_sort, default_order = default_sort_for_preset(preset)
+    sort = args.get("sort") or default_sort
+    order = normalize_sort_order(args.get("order") or default_order, default_order)
+    page = parse_int_value(args.get("page"), 1, min_value=1)
+    limit = parse_int_value(args.get("limit"), 50, min_value=1)
+    if limit not in PRODUCT_PAGE_LIMITS:
+        limit = 50
+    lead_time_days = get_suggest_lead_time_days()
+    safety_pct = get_suggest_safety_pct()
+    suggest_days = get_suggest_days()
+    return {
+        "export": args.get("export") == "1",
+        "search": search,
+        "preset": preset,
+        "sort": sort,
+        "order": order,
+        "page": page,
+        "limit": limit,
+        "offset": (page - 1) * limit,
+        "lead_time_days": lead_time_days,
+        "safety_pct": safety_pct,
+        "suggest_days": suggest_days,
+    }
+
+
+def fetch_product_rows(list_state, *, limit=None, offset=None):
+    effective_limit = list_state["limit"] if limit is None else limit
+    effective_offset = list_state["offset"] if offset is None else offset
+    return get_products(
+        DB_PATH,
+        search=list_state["search"],
+        preset=list_state["preset"],
+        sort=list_state["sort"],
+        order=list_state["order"],
+        limit=effective_limit,
+        offset=effective_offset,
+        lead_time_days=list_state["lead_time_days"],
+        safety_pct=list_state["safety_pct"],
+        suggest_days=list_state["suggest_days"],
+    )
+
+
+def serialize_product_export_row(product):
+    return [
+        product["apilo_id"] or "",
+        product["sku"] or "",
+        product["original_code"] or "",
+        product["name"] or "",
+        product["ean"] or "",
+        product["quantity"] if product["quantity"] is not None else "",
+        product["suggested_qty"] if product["suggested_qty"] is not None else "",
+        product["shortage_qty"] if product["shortage_qty"] is not None else "",
+        product["quantity_30d"] if product["quantity_30d"] is not None else "",
+        product["quantity_year"] if product["quantity_year"] is not None else "",
+        product["orders_year"] if product["orders_year"] is not None else "",
+        product["price_with_tax"] if product["price_with_tax"] is not None else "",
+        product["allegro_price_with_tax"] if product["allegro_price_with_tax"] is not None else "",
+        product["stock_value"] if product["stock_value"] is not None else "",
+        product["allegro_auction_id"] or "",
+        product["image_url"] or "",
+        format_pull_time(product["updated_at"] or ""),
+    ]
+
+
+def build_products_csv_response(list_state):
+    export_rows = fetch_product_rows(list_state, limit=None, offset=0)
+    record_audit_event(
+        "products_export_csv",
+        "settings",
+        entity_label="Eksport produktów CSV",
+        new_value=format_position_count(len(export_rows)),
+        details={
+            "search": list_state["search"] or "",
+            "preset": list_state["preset"],
+            "sort": list_state["sort"],
+            "order": list_state["order"],
+        },
+    )
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=";")
+    writer.writerow(PRODUCT_EXPORT_COLUMNS)
+    for product in export_rows:
+        writer.writerow(serialize_product_export_row(product))
+    filename = (
+        f"produkty_{list_state['preset']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    )
+    response = app.response_class(
+        output.getvalue(),
+        mimetype="text/csv",
+    )
+    response.headers["Content-Disposition"] = f"attachment; filename={filename}"
+    return response
 
 
 def update_sync_status(**changes):
@@ -1138,150 +1259,28 @@ def logout():
 def index():
     if tokens_missing():
         return redirect(url_for("settings"))
-    export = request.args.get("export") == "1"
-    search = request.args.get("search")
-    preset = normalize_product_preset(request.args.get("preset") or "all")
-    default_sort, default_order = default_sort_for_preset(preset)
-    sort = request.args.get("sort") or default_sort
-    order = request.args.get("order") or default_order
-    try:
-        page = int(request.args.get("page") or 1)
-    except ValueError:
-        page = 1
-    try:
-        limit = int(request.args.get("limit") or 50)
-    except ValueError:
-        limit = 50
-    if limit not in (25, 50, 100, 200):
-        limit = 50
-    if page < 1:
-        page = 1
-    offset = (page - 1) * limit
-    lead_time_days = get_suggest_lead_time_days()
-    safety_pct = get_suggest_safety_pct()
-    suggest_days = get_suggest_days()
-    if export:
-        export_rows = get_products(
-            DB_PATH,
-            search=search,
-            preset=preset,
-            sort=sort,
-            order=order,
-            limit=None,
-            offset=0,
-            lead_time_days=lead_time_days,
-            safety_pct=safety_pct,
-            suggest_days=suggest_days,
-        )
-        record_audit_event(
-            "products_export_csv",
-            "settings",
-            entity_label="Eksport produktów CSV",
-            new_value=format_position_count(len(export_rows)),
-            details={
-                "search": search or "",
-                "preset": preset,
-                "sort": sort,
-                "order": order,
-            },
-        )
-        output = io.StringIO()
-        writer = csv.writer(output, delimiter=";")
-        writer.writerow(
-            [
-                "Apilo ID",
-                "SKU",
-                "Kod oryginalny",
-                "Nazwa",
-                "EAN",
-                "Stan",
-                "Sug. stan",
-                "Brak",
-                "Sprzedaz 30d",
-                "Sprzedaz 365d",
-                "Zamowienia 365d",
-                "Cena sklepowa brutto",
-                "Cena Allegro brutto",
-                "Wartosc stanu",
-                "Allegro ID",
-                "URL zdjecia",
-                "Aktualizacja",
-            ]
-        )
-        for product in export_rows:
-            writer.writerow(
-                [
-                    product["apilo_id"] or "",
-                    product["sku"] or "",
-                    product["original_code"] or "",
-                    product["name"] or "",
-                    product["ean"] or "",
-                    product["quantity"] if product["quantity"] is not None else "",
-                    product["suggested_qty"] if product["suggested_qty"] is not None else "",
-                    product["shortage_qty"] if product["shortage_qty"] is not None else "",
-                    product["quantity_30d"] if product["quantity_30d"] is not None else "",
-                    product["quantity_year"] if product["quantity_year"] is not None else "",
-                    product["orders_year"] if product["orders_year"] is not None else "",
-                    product["price_with_tax"] if product["price_with_tax"] is not None else "",
-                    (
-                        product["allegro_price_with_tax"]
-                        if product["allegro_price_with_tax"] is not None
-                        else ""
-                    ),
-                    product["stock_value"] if product["stock_value"] is not None else "",
-                    product["allegro_auction_id"] or "",
-                    product["image_url"] or "",
-                    format_pull_time(product["updated_at"] or ""),
-                ]
-            )
-        filename = f"produkty_{preset}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-        response = app.response_class(
-            output.getvalue(),
-            mimetype="text/csv",
-        )
-        response.headers["Content-Disposition"] = f"attachment; filename={filename}"
-        return response
-    products = get_products(
-        DB_PATH,
-        search=search,
-        preset=preset,
-        sort=sort,
-        order=order,
-        limit=limit,
-        offset=offset,
-        lead_time_days=lead_time_days,
-        safety_pct=safety_pct,
-        suggest_days=suggest_days,
-    )
+    list_state = build_product_list_state(request.args)
+    if list_state["export"]:
+        return build_products_csv_response(list_state)
+    products = fetch_product_rows(list_state)
     total_count = get_products_count(
         DB_PATH,
-        search=search,
-        preset=preset,
-        lead_time_days=lead_time_days,
-        safety_pct=safety_pct,
-        suggest_days=suggest_days,
+        search=list_state["search"],
+        preset=list_state["preset"],
+        lead_time_days=list_state["lead_time_days"],
+        safety_pct=list_state["safety_pct"],
+        suggest_days=list_state["suggest_days"],
     )
-    total_pages = max(1, (total_count + limit - 1) // limit)
-    if page > total_pages:
-        page = total_pages
-        offset = (page - 1) * limit
-        products = get_products(
-            DB_PATH,
-            search=search,
-            preset=preset,
-            sort=sort,
-            order=order,
-            limit=limit,
-            offset=offset,
-            lead_time_days=lead_time_days,
-            safety_pct=safety_pct,
-            suggest_days=suggest_days,
-        )
+    total_pages = max(1, (total_count + list_state["limit"] - 1) // list_state["limit"])
+    if list_state["page"] > total_pages:
+        list_state["page"] = total_pages
+        list_state["offset"] = (list_state["page"] - 1) * list_state["limit"]
+        products = fetch_product_rows(list_state)
     dashboard = get_dashboard_metrics(
         DB_PATH,
-        lead_time_days=lead_time_days,
-        safety_pct=safety_pct,
-        suggest_days=suggest_days,
+        lead_time_days=list_state["lead_time_days"],
+        safety_pct=list_state["safety_pct"],
+        suggest_days=list_state["suggest_days"],
     )
     preset_counts = {
         "all": dashboard.get("total_products", 0) or 0,
@@ -1328,22 +1327,25 @@ def index():
     return render_template(
         "index.html",
         products=products,
-        search=search or "",
-        preset=preset,
-        preset_label=PRODUCT_PRESET_LABELS.get(preset, PRODUCT_PRESET_LABELS["all"]),
+        search=list_state["search"] or "",
+        preset=list_state["preset"],
+        preset_label=PRODUCT_PRESET_LABELS.get(
+            list_state["preset"],
+            PRODUCT_PRESET_LABELS["all"],
+        ),
         preset_options=preset_options,
-        sort=sort,
-        order=order,
-        page=page,
+        sort=list_state["sort"],
+        order=list_state["order"],
+        page=list_state["page"],
         total_pages=total_pages,
         total_count=total_count,
-        limit=limit,
+        limit=list_state["limit"],
         dashboard=dashboard,
         suggestions=suggestions,
         suggest_details=suggest_details,
         year_summary=year_summary,
-        suggest_lead_time_days=lead_time_days,
-        suggest_safety_pct=safety_pct,
+        suggest_lead_time_days=list_state["lead_time_days"],
+        suggest_safety_pct=list_state["safety_pct"],
         sync_status=build_sync_status_payload(),
         product_detail_base_url=normalize_base_url(
             get_config_value("APILO_BASE_URL", "apilo_base_url", "https://api.apilo.com")

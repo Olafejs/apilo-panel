@@ -1,14 +1,9 @@
-import sqlite3
-
 from werkzeug.security import generate_password_hash
 
 from db import (
     get_recent_audit_log,
     get_setting,
-    get_tokens,
-    migrate_secret_storage,
     record_login_attempt,
-    save_tokens,
     set_setting,
     upsert_product_from_apilo,
 )
@@ -49,6 +44,25 @@ def test_login_rate_limit_blocks_after_limit(app_module, client):
 
     assert response.status_code == 429
     assert "Za dużo nieudanych prób logowania" in response.get_data(as_text=True)
+
+
+def test_post_without_csrf_is_rejected(client):
+    response = client.post("/logout")
+
+    assert response.status_code == 400
+    assert response.get_data(as_text=True) == "Bad Request"
+
+
+def test_setup_password_blocks_remote_request_without_setup_token(client):
+    response = client.get(
+        "/setup-password",
+        environ_base={"REMOTE_ADDR": "192.168.1.50"},
+    )
+
+    assert response.status_code == 403
+    assert "Pierwsze ustawienie hasła jest dozwolone tylko lokalnie" in response.get_data(
+        as_text=True
+    )
 
 
 def test_alert_settings_save_and_render(app_module, logged_in_client):
@@ -152,73 +166,13 @@ def test_sales_report_uses_realized_query_flag(app_module, logged_in_client, mon
     assert "Produkt testowy" in html
 
 
-def test_secret_settings_are_encrypted_at_rest(app_module):
-    set_setting(app_module.DB_PATH, "smtp_password", "smtp-tajne")
+def test_healthz_returns_ok_payload(client):
+    response = client.get("/healthz")
 
-    conn = sqlite3.connect(app_module.DB_PATH)
-    raw_value = conn.execute(
-        "SELECT value FROM settings WHERE key = 'smtp_password'"
-    ).fetchone()[0]
-    conn.close()
-
-    assert raw_value.startswith("enc:v1:")
-    assert get_setting(app_module.DB_PATH, "smtp_password") == "smtp-tajne"
-
-
-def test_tokens_are_encrypted_and_legacy_plaintext_can_be_migrated(app_module):
-    save_tokens(
-        app_module.DB_PATH,
-        {
-            "access_token": "access-secret",
-            "access_token_expires_at": "2026-03-12T00:00:00+00:00",
-            "refresh_token": "refresh-secret",
-            "refresh_token_expires_at": "2026-03-13T00:00:00+00:00",
-        },
-    )
-
-    conn = sqlite3.connect(app_module.DB_PATH)
-    encrypted_tokens = conn.execute(
-        "SELECT access_token, refresh_token FROM tokens WHERE id = 1"
-    ).fetchone()
-    assert encrypted_tokens[0].startswith("enc:v1:")
-    assert encrypted_tokens[1].startswith("enc:v1:")
-
-    conn.execute("DELETE FROM tokens")
-    conn.execute(
-        """
-        INSERT INTO tokens (
-            id,
-            access_token,
-            access_token_expires_at,
-            refresh_token,
-            refresh_token_expires_at,
-            updated_at
-        ) VALUES (1, ?, ?, ?, ?, ?)
-        """,
-        (
-            "legacy-access",
-            "2026-03-12T00:00:00+00:00",
-            "legacy-refresh",
-            "2026-03-13T00:00:00+00:00",
-            "2026-03-11T00:00:00+00:00",
-        ),
-    )
-    conn.commit()
-    conn.close()
-
-    migrated = migrate_secret_storage(app_module.DB_PATH)
-    tokens = get_tokens(app_module.DB_PATH)
-    conn = sqlite3.connect(app_module.DB_PATH)
-    migrated_tokens = conn.execute(
-        "SELECT access_token, refresh_token FROM tokens WHERE id = 1"
-    ).fetchone()
-    conn.close()
-
-    assert migrated["tokens"] == 2
-    assert migrated_tokens[0].startswith("enc:v1:")
-    assert migrated_tokens[1].startswith("enc:v1:")
-    assert tokens["access_token"] == "legacy-access"
-    assert tokens["refresh_token"] == "legacy-refresh"
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["status"] == "ok"
+    assert payload["version"]
 
 
 def test_index_csv_export_uses_current_filters(app_module, logged_in_client, monkeypatch):
