@@ -240,6 +240,54 @@
           {% endif %}
         </div>
 
+        <div class="card full">
+          <div class="card-head">
+            <div>
+              <h2>Alert niskich stanów</h2>
+              <p class="card-desc">Podgląd bieżących braków i ręczne wysłanie maila z alertem.</p>
+            </div>
+          </div>
+          <div class="details-stats">
+            <div>Pozycji z brakami: <strong>{{ low_stock_alerts.count or 0 }}</strong></div>
+            <div>Łączny brak: <strong>{{ low_stock_alerts.units or 0 }}</strong> szt.</div>
+            <div>Ostatnia wysyłka: <strong>{{ low_stock_alerts.last_sent_at or "-" }}</strong></div>
+            <div>Ostatnio wysłano: <strong>{{ low_stock_alerts.last_sent_count or 0 }}</strong> pozycji</div>
+          </div>
+          {% if low_stock_alerts.rows %}
+            <table class="details-table">
+              <thead>
+                <tr>
+                  <th>Produkt</th>
+                  <th>EAN</th>
+                  <th>Stan</th>
+                  <th>Sug. stan</th>
+                  <th>Brak</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in low_stock_alerts.rows %}
+                <tr>
+                  <td>{{ row.name }}</td>
+                  <td>{{ row.ean or "-" }}</td>
+                  <td class="qty">{{ row.quantity }}</td>
+                  <td class="qty">{{ row.suggested_qty }}</td>
+                  <td class="qty">{{ row.shortage_qty }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% else %}
+            <div class="details-empty">Brak pozycji wymagających alertu.</div>
+          {% endif %}
+          <form method="post" class="stack inline-action-form">
+            <input type="hidden" name="action" value="alerts_email">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="action-row">
+              <button class="btn primary" type="submit">Wyślij alert email</button>
+            </div>
+          </form>
+        </div>
+
         <div class="settings-break full">
           <h2>Powiadomienia i bezpieczeństwo</h2>
           <p>Konfiguracja email i hasła do panelu.</p>

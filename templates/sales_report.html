@@ -11,7 +11,14 @@
     <header class="topbar">
       <div>
         <h1>Raport sprzedaży</h1>
-        <p class="subtle">Ostatnie {{ days }} dni · opłacone i zrealizowane</p>
+        <p class="subtle">
+          Ostatnie {{ days }} dni ·
+          {% if realized_only %}
+            opłacone{% if realized_filter %} i zrealizowane{% else %} (fallback do wszystkich opłaconych){% endif %}
+          {% else %}
+            wszystkie opłacone
+          {% endif %}
+        </p>
       </div>
       <div class="actions">
         <a class="btn" href="{{ url_for('index') }}">Powrót</a>
@@ -32,14 +39,19 @@
             <option value="365" {% if days == 365 %}selected{% endif %}>365</option>
           </select>
         </label>
-        <a class="btn" href="{{ url_for('sales_report', days=days, export=1) }}">Pobierz CSV</a>
+        <label class="checkbox-row">
+          <input type="checkbox" name="realized" value="1" {% if realized_only %}checked{% endif %}>
+          <span>Tylko zrealizowane</span>
+        </label>
+        <button class="btn" type="submit">Pokaż</button>
+        <a class="btn" href="{{ url_for('sales_report', days=days, realized=1 if realized_only else 0, export=1) }}">Pobierz CSV</a>
       </form>
       <div class="hint">Zakres od: {{ updated_after }}</div>
       <div class="hint">Zamówienia: {{ orders_used }} / {{ orders_total }}</div>
     </section>
 
     <section class="table-wrap">
-      {% if not realized_filter %}
+      {% if realized_only and not realized_filter %}
         <div class="message info">Nie znaleziono statusu „zrealizowane”. Pokazuję wszystkie opłacone zamówienia.</div>
       {% endif %}
       <table>

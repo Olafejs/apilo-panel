@@ -446,6 +446,56 @@ def get_allegro_price_list_id():
     return parse_int_value(get_setting(DB_PATH, "allegro_price_list_id"), 20, min_value=1)
 
 
+def get_realized_order_status_ids(client):
+    try:
+        status_map = client.get_order_status_map()
+    except Exception:
+        return set()
+    realized_ids = set()
+    for item in status_map:
+        haystack = " ".join(
+            str(item.get(key) or "")
+            for key in ("key", "name", "description")
+        ).lower()
+        if "zrealiz" in haystack or "complete" in haystack:
+            status_id = item.get("id")
+            if status_id is not None:
+                realized_ids.add(status_id)
+    return realized_ids
+
+
+def get_low_stock_rows(limit=10):
+    lead_time_days = get_suggest_lead_time_days()
+    safety_pct = get_suggest_safety_pct()
+    suggest_days = get_suggest_days()
+    rows = get_products(
+        DB_PATH,
+        preset="shortage",
+        sort="shortage",
+        order="desc",
+        limit=limit,
+        offset=0,
+        lead_time_days=lead_time_days,
+        safety_pct=safety_pct,
+        suggest_days=suggest_days,
+    )
+    result = []
+    for row in rows:
+        current_qty = row["quantity"] if row["quantity"] is not None else 0
+        suggested_qty = row["suggested_qty"] if row["suggested_qty"] is not None else 0
+        shortage_qty = row["shortage_qty"] if row["shortage_qty"] is not None else 0
+        result.append(
+            {
+                "name": row["name"] or "-",
+                "ean": row["ean"] or "",
+                "quantity": current_qty,
+                "suggested_qty": suggested_qty,
+                "shortage_qty": shortage_qty,
+            }
+        )
+    return result
+
+
 def is_safe_redirect_target(target):
     if not target:
         return False
@@ -900,6 +950,19 @@ def settings():
             except Exception as exc:
                 app.logger.exception("Email test failed")
                 flash(public_error_message(exc), "error")
+        elif action == "alerts_email":
+            try:
+                alert_rows = get_low_stock_rows(limit=200)
+                if not alert_rows:
+                    flash("Brak pozycji do alertu niskich stanów.", "info")
+                else:
+                    send_low_stock_alert_email(alert_rows)
+                    set_setting(DB_PATH, "alerts_low_stock_sent_at", utc_now_iso())
+                    set_setting(DB_PATH, "alerts_low_stock_sent_count", str(len(alert_rows)))
+                    flash(f"Wysłano alert niskich stanów ({len(alert_rows)} pozycji).", "success")
+            except Exception as exc:
+                app.logger.exception("Low stock alert email failed")
+                flash(public_error_message(exc), "error")
         elif action == "password":
             password = request.form.get("password")
             confirm = request.form.get("confirm")
@@ -979,6 +1042,21 @@ def settings():
         "allegro": get_setting(DB_PATH, "inventory_value_allegro") or "",
         "updated_at": format_pull_time(get_setting(DB_PATH, "inventory_value_at") or ""),
     }
+    low_stock_dashboard = get_dashboard_metrics(
+        DB_PATH,
+        lead_time_days=get_suggest_lead_time_days(),
+        safety_pct=get_suggest_safety_pct(),
+        suggest_days=get_suggest_days(),
+    )
+    low_stock_alerts = {
+        "rows": get_low_stock_rows(limit=10),
+        "count": low_stock_dashboard.get("shortage_count", 0) or 0,
+        "units": low_stock_dashboard.get("shortage_units", 0) or 0,
+        "last_sent_at": format_pull_time(get_setting(DB_PATH, "alerts_low_stock_sent_at") or ""),
+        "last_sent_count": parse_int_value(
+            get_setting(DB_PATH, "alerts_low_stock_sent_count"), 0, min_value=0
+        ),
+    }
     return render_template(
         "settings.html",
         required=tokens_missing(),
@@ -990,6 +1068,7 @@ def settings():
         api_edit_mode=api_edit_mode,
         show_api_form=show_api_form,
         inventory_values=inventory_values,
+        low_stock_alerts=low_stock_alerts,
         suggest_lead_time_days=get_suggest_lead_time_days(),
         suggest_safety_pct=get_suggest_safety_pct(),
         suggest_days=get_suggest_days(),
@@ -1073,10 +1152,11 @@ def sales_report():
     if days < 1 or days > 365:
         days = 30
     export = request.args.get("export") == "1"
+    realized_only = request.args.get("realized", "1") != "0"
     now = datetime.now(timezone.utc)
     updated_after = (now - timedelta(days=days)).isoformat()
     try:
-        totals, meta, _daily_map = get_sales_totals(days)
+        totals, meta, _daily_map = get_sales_totals(days, realized_only=realized_only)
     except Exception as exc:
         app.logger.exception("Sales report generation failed")
         flash(public_error_message(exc), "error")
@@ -1106,6 +1186,7 @@ def sales_report():
         "sales_report.html",
         rows=rows,
         days=days,
+        realized_only=realized_only,
         orders_total=meta["orders_total"],
         orders_used=meta["orders_used"],
         realized_filter=meta["realized_filter"],
@@ -1113,11 +1194,22 @@ def sales_report():
     )
 
 
-def get_sales_totals(days):
+def get_sales_totals(days, realized_only=True):
     now = datetime.now(timezone.utc)
     ordered_after = (now - timedelta(days=days)).isoformat()
     client = get_client()
     orders = client.list_orders(ordered_after=ordered_after, payment_status=2)
+    orders_total = len(orders)
+    realized_filter = False
+    if realized_only:
+        realized_status_ids = get_realized_order_status_ids(client)
+        if realized_status_ids:
+            realized_filter = True
+            orders = [
+                order
+                for order in orders
+                if parse_int_value(order.get("status"), -1) in realized_status_ids
+            ]
     by_apilo_id, by_original_code, by_sku = get_product_maps(DB_PATH)
     totals = {}
     details_map = {}
@@ -1156,9 +1248,9 @@ def get_sales_totals(days):
                 )
                 entry["qty"] += qty
     meta = {
-        "orders_total": len(orders),
+        "orders_total": orders_total,
         "orders_used": len(orders),
-        "realized_filter": False,
+        "realized_filter": realized_filter,
     }
     details_list = {}
     for ean, orders_map in details_map.items():
@@ -1445,7 +1537,7 @@ def format_pln(value):
     return f"{formatted} zł"
 
 
-def send_test_email():
+def send_email_message(subject, body):
     import smtplib
     from email.message import EmailMessage
 
@@ -1466,10 +1558,10 @@ def send_test_email():
         raise RuntimeError("Nieprawidłowy port SMTP.")
 
     msg = EmailMessage()
-    msg["Subject"] = "Apilo - test email"
+    msg["Subject"] = subject
     msg["From"] = sender
     msg["To"] = recipient
-    msg.set_content("Test konfiguracji SMTP z panelu Apilo.")
+    msg.set_content(body)
 
     smtp_class = smtplib.SMTP_SSL if use_ssl else smtplib.SMTP
     with smtp_class(host, port, timeout=30) as server:
@@ -1480,6 +1572,30 @@ def send_test_email():
         if user and password:
             server.login(user, password)
         server.send_message(msg)
+
+
+def send_test_email():
+    send_email_message("Apilo - test email", "Test konfiguracji SMTP z panelu Apilo.")
+
+
+def send_low_stock_alert_email(rows):
+    lines = [
+        "Alert niskich stanow - Apilo Panel",
+        "",
+        f"Liczba pozycji: {len(rows)}",
+        "",
+    ]
+    for row in rows:
+        lines.append(
+            "- {name} | EAN: {ean} | stan: {qty} | sugerowany: {suggested} | brak: {shortage}".format(
+                name=row["name"],
+                ean=row["ean"] or "-",
+                qty=row["quantity"],
+                suggested=row["suggested_qty"],
+                shortage=row["shortage_qty"],
+            )
+        )
+    send_email_message("Apilo - alert niskich stanow", "\n".join(lines))
 
 
 @app.get("/thumb/<int:apilo_id>")

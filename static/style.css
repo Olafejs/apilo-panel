@@ -840,6 +840,19 @@ tbody tr.dirty {
   min-width: 0;
 }
 
+.checkbox-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 500;
+}
+
+.checkbox-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
 .stack label {
   display: flex;
   flex-direction: column;
@@ -849,14 +862,10 @@ tbody tr.dirty {
 
 .stack label.checkbox-row {
   flex-direction: row;
-  align-items: center;
-  gap: 10px;
   font-weight: 500;
 }
 
 .stack label.checkbox-row input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
   margin: 0;
 }
 

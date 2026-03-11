@@ -367,5 +367,8 @@ class ApiloClient:
         data = self._request("GET", "/rest/api/sale/")
         return data.get("platforms", []) if isinstance(data, dict) else []
 
+    def get_order_status_map(self):
+        return self._request("GET", "/rest/api/orders/status/map/") or []
+
     def get_shipment_status_map(self):
         return self._request("GET", "/rest/api/orders/shipment/status/map/") or []

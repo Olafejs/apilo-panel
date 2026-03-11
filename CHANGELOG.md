@@ -16,6 +16,20 @@ All important changes should be tracked here together with the application versi
 
 - Additional validation coverage for SMTP fields.
 
+## [1.0.22] - 2026-03-11
+
+### Added
+
+- Added low-stock alert preview and manual alert email sending in Settings.
+
+### Changed
+
+- Sales report can now explicitly switch between all paid orders and paid-plus-realized orders.
+
+### Fixed
+
+- Sales report now uses the real Apilo order-status map to detect `Zrealizowane` instead of always falling back to all paid orders.
+
 ## [1.0.21] - 2026-03-10
 
 ### Added
