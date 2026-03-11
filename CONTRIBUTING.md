@@ -1,29 +1,36 @@
 # Contributing
 
-Dziękuję za chęć współtworzenia projektu.
+Projekt jest mały, więc zmiany powinny też być małe i konkretne.
 
-## Zasady ogólne
-- Twórz małe, konkretne zmiany.
-- Używaj czytelnych commitów (`feat:`, `fix:`, `chore:`).
-- Zachowuj zgodność z istniejącym stylem kodu (Python 3.10, PEP8, 4 spacje).
-- Nie commituj danych lokalnych i sekretów (`.env`, bazy SQLite, logi, cache).
+## Zasady
+
+- nie commituj lokalnych danych, sekretów i cache (`.env`, `data/`, logi, SQLite),
+- trzymaj route Flask cienkie, logikę przenoś do modułów pomocniczych,
+- nie psuj kompatybilności istniejących ustawień i migracji danych bez wyraźnego powodu,
+- dodawaj testy tam, gdzie zmiana dotyka logiki albo bezpieczeństwa.
 
 ## Setup developerski
+
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+pip install -r requirements-dev.txt
 cp .env.example .env
+pytest -q
 python app.py
 ```
 
-## Pull Request checklist
-- Opisz problem i uzasadnij zmianę.
-- Dodaj kroki weryfikacji (co kliknąć / uruchomić).
-- Uzupełnij `CHANGELOG.md` (sekcja `Unreleased`) dla zmian user-facing.
-- Jeśli zmiana dotyczy konfiguracji, opisz wpływ na `.env` i migrację danych.
+## Checklista przed push
 
-## Standard jakości
-- Route Flask powinny być cienkie, logika biznesowa w `apilo.py` / `db.py`.
-- Obsługuj błędy bez ujawniania sekretów.
-- Preferuj funkcje możliwe do testowania w izolacji.
+- `python3 -m py_compile app.py apilo.py db.py`
+- `pytest -q`
+- jeśli zmiana dotyczy deployu: `docker compose up -d --build`
+- jeśli zmiana jest user-facing: uzupełnij `CHANGELOG.md`
+- jeśli zmiana dotyczy konfiguracji: uzupełnij `README.md` i `.env.example`
+
+## Wersjonowanie
+
+- `VERSION` pokazuje bieżącą wersję aplikacji,
+- `CHANGELOG.md` opisuje zmiany per release,
+- tag Git powinien odpowiadać wersji z `VERSION`.

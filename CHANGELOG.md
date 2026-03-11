@@ -16,6 +16,17 @@ All important changes should be tracked here together with the application versi
 
 - Additional validation coverage for SMTP fields.
 
+## [1.0.36] - 2026-03-11
+
+### Added
+
+- Added `SECURITY.md` with a simple vulnerability reporting policy for the public repository.
+
+### Changed
+
+- Refreshed `README.md`, `CONTRIBUTING.md`, `.env.example`, and internal docs for the current modular architecture and public release.
+- Clarified setup, tests, release flow, and runtime paths in repository documentation.
+
 ## [1.0.35] - 2026-03-11
 
 ### Added
