@@ -391,6 +391,44 @@
             </div>
           </form>
         </div>
+
+        <div class="card full">
+          <div class="card-head">
+            <div>
+              <h2>Historia zmian</h2>
+              <p class="card-desc">Ostatnie operacje wykonane w panelu wraz z adresem IP.</p>
+            </div>
+          </div>
+          {% if audit_entries %}
+            <table class="details-table">
+              <thead>
+                <tr>
+                  <th>Czas</th>
+                  <th>Akcja</th>
+                  <th>Obiekt</th>
+                  <th>Zmiana</th>
+                  <th>IP</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for entry in audit_entries %}
+                <tr>
+                  <td>{{ entry.created_at }}</td>
+                  <td>{{ entry.action }}</td>
+                  <td>
+                    <strong>{{ entry.entity_label }}</strong>
+                    <div class="hint">{{ entry.entity_type }}</div>
+                  </td>
+                  <td>{{ entry.change }}</td>
+                  <td>{{ entry.actor_ip }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% else %}
+            <div class="details-empty">Brak historii zmian.</div>
+          {% endif %}
+        </div>
       </section>
     </div>
   </body>

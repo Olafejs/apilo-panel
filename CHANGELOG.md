@@ -16,6 +16,17 @@ All important changes should be tracked here together with the application versi
 
 - Additional validation coverage for SMTP fields.
 
+## [1.0.23] - 2026-03-11
+
+### Added
+
+- Added an audit log table for panel operations, including IP address and before/after values.
+- Added a "Historia zmian" section in Settings with the latest panel operations.
+
+### Changed
+
+- Settings saves, manual stock changes, manual sync, password operations, and selected admin actions now write audit entries.
+
 ## [1.0.22] - 2026-03-11
 
 ### Added

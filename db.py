@@ -1,5 +1,6 @@
-import sqlite3
 import os
+import json
+import sqlite3
 from datetime import datetime, timezone
 
 
@@ -98,6 +99,22 @@ def init_db(db_path):
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                action TEXT NOT NULL,
+                entity_type TEXT NOT NULL,
+                entity_id TEXT,
+                entity_label TEXT,
+                old_value TEXT,
+                new_value TEXT,
+                details_json TEXT,
+                actor_ip TEXT,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_products_name ON products(name)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_products_ean ON products(ean)")
@@ -107,6 +124,9 @@ def init_db(db_path):
         )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_login_attempts_ip_created ON login_attempts(ip_address, created_at)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log(created_at DESC)"
         )
     _ensure_column(db_path, "products", "ean", "TEXT")
     _ensure_column(db_path, "products", "image_url", "TEXT")
@@ -733,6 +753,64 @@ def update_product_quantity(db_path, product_id, quantity):
             (quantity, quantity, now, now, product_id),
         )
     conn.close()
+
+
+def record_audit_log(
+    db_path,
+    action,
+    entity_type,
+    entity_id=None,
+    entity_label=None,
+    old_value=None,
+    new_value=None,
+    details=None,
+    actor_ip=None,
+):
+    details_json = json.dumps(details, ensure_ascii=False) if details is not None else None
+    conn = get_db(db_path)
+    with conn:
+        conn.execute(
+            """
+            INSERT INTO audit_log (
+                action,
+                entity_type,
+                entity_id,
+                entity_label,
+                old_value,
+                new_value,
+                details_json,
+                actor_ip,
+                created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                action,
+                entity_type,
+                str(entity_id) if entity_id is not None else None,
+                entity_label,
+                old_value,
+                new_value,
+                details_json,
+                actor_ip,
+                utc_now_iso(),
+            ),
+        )
+    conn.close()
+
+
+def get_recent_audit_log(db_path, limit=50):
+    conn = get_db(db_path)
+    rows = conn.execute(
+        """
+        SELECT *
+        FROM audit_log
+        ORDER BY created_at DESC
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
+    conn.close()
+    return rows
 
 
 def prune_login_attempts(db_path, before_iso):

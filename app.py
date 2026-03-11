@@ -14,6 +14,7 @@ from flask import (
     Flask,
     abort,
     flash,
+    has_request_context,
     jsonify,
     redirect,
     render_template,
@@ -29,6 +30,7 @@ from db import (
     clear_login_attempts,
     count_recent_login_attempts,
     get_dashboard_metrics,
+    get_recent_audit_log,
     get_tokens,
     get_products,
     get_products_count,
@@ -40,6 +42,7 @@ from db import (
     get_sales_year_map,
     init_db,
     get_setting,
+    record_audit_log,
     set_setting,
     save_sales_cache,
     save_sales_year_cache,
@@ -496,6 +499,153 @@ def get_low_stock_rows(limit=10):
     return result
 
 
+AUDIT_ACTION_LABELS = {
+    "login_success": "Logowanie",
+    "password_setup": "Pierwsze hasło",
+    "password_change": "Zmiana hasła",
+    "email_settings_update": "Ustawienia SMTP",
+    "email_test_send": "Email testowy",
+    "api_settings_update": "Ustawienia API",
+    "api_connection_test": "Test API",
+    "allegro_settings_update": "Cennik Allegro",
+    "suggestions_settings_update": "Ustawienia sugestii",
+    "suggestions_refresh": "Przeliczenie sugestii",
+    "inventory_value_refresh": "Przeliczenie wartości",
+    "low_stock_alert_send": "Alert niskich stanów",
+    "product_quantity_update": "Zmiana stanu",
+    "manual_sync_pull": "Pobranie z Apilo",
+}
+
+AUDIT_ENTITY_LABELS = {
+    "auth": "Logowanie",
+    "security": "Bezpieczeństwo",
+    "email": "Email",
+    "api": "API",
+    "settings": "Ustawienia",
+    "product": "Produkt",
+    "sync": "Synchronizacja",
+}
+
+
+def get_email_settings_snapshot():
+    return {
+        "smtp_host": get_setting(DB_PATH, "smtp_host") or "",
+        "smtp_port": get_setting(DB_PATH, "smtp_port") or "",
+        "smtp_user": get_setting(DB_PATH, "smtp_user") or "",
+        "smtp_use_tls": get_setting(DB_PATH, "smtp_use_tls") or "0",
+        "smtp_use_ssl": get_setting(DB_PATH, "smtp_use_ssl") or "0",
+        "smtp_from": get_setting(DB_PATH, "smtp_from") or "",
+        "smtp_to": get_setting(DB_PATH, "smtp_to") or "",
+        "has_password": bool(get_setting(DB_PATH, "smtp_password")),
+    }
+
+
+def get_api_settings_snapshot():
+    return {
+        "apilo_base_url": get_setting(DB_PATH, "apilo_base_url") or "",
+        "apilo_client_id": get_setting(DB_PATH, "apilo_client_id") or "",
+        "has_client_secret": bool(get_setting(DB_PATH, "apilo_client_secret")),
+    }
+
+
+def snapshot_value_text(value):
+    if value is None or value == "":
+        return "-"
+    return str(value)
+
+
+def summarize_email_settings_snapshot(values):
+    return (
+        f"host={values.get('smtp_host') or '-'} "
+        f"port={values.get('smtp_port') or '-'} "
+        f"user={values.get('smtp_user') or '-'} "
+        f"tls={values.get('smtp_use_tls') or '0'} "
+        f"ssl={values.get('smtp_use_ssl') or '0'} "
+        f"from={values.get('smtp_from') or '-'} "
+        f"to={values.get('smtp_to') or '-'} "
+        f"haslo={'set' if values.get('has_password') else 'empty'}"
+    )
+
+
+def summarize_api_settings_snapshot(base_url, client_id, has_secret):
+    return (
+        f"base={base_url or '-'} "
+        f"client_id={client_id or '-'} "
+        f"secret={'set' if has_secret else 'empty'}"
+    )
+
+
+def summarize_suggestions_settings_snapshot(lead_time_days, safety_pct, suggest_days):
+    return (
+        f"lead={snapshot_value_text(lead_time_days)} "
+        f"days={snapshot_value_text(suggest_days)} "
+        f"safety={snapshot_value_text(safety_pct)}%"
+    )
+
+
+def summarize_inventory_values_snapshot(store_value, allegro_value):
+    return (
+        f"sklep={snapshot_value_text(store_value)} "
+        f"allegro={snapshot_value_text(allegro_value)}"
+    )
+
+
+def record_audit_event(
+    action,
+    entity_type,
+    entity_id=None,
+    entity_label=None,
+    old_value=None,
+    new_value=None,
+    details=None,
+    actor_ip=None,
+):
+    resolved_ip = actor_ip
+    if resolved_ip is None:
+        resolved_ip = get_client_ip() if has_request_context() else ""
+    try:
+        record_audit_log(
+            DB_PATH,
+            action=action,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            entity_label=entity_label,
+            old_value=old_value,
+            new_value=new_value,
+            details=details,
+            actor_ip=resolved_ip,
+        )
+    except Exception:
+        app.logger.exception("Audit log write failed for action=%s", action)
+
+
+def build_recent_audit_entries(limit=40):
+    entries = []
+    for row in get_recent_audit_log(DB_PATH, limit=limit):
+        old_value = (row["old_value"] or "").strip()
+        new_value = (row["new_value"] or "").strip()
+        if old_value and new_value and old_value != new_value:
+            change_text = f"{old_value} -> {new_value}"
+        elif new_value:
+            change_text = new_value
+        elif old_value:
+            change_text = old_value
+        else:
+            change_text = "-"
+        entries.append(
+            {
+                "created_at": format_pull_time(row["created_at"]),
+                "action": AUDIT_ACTION_LABELS.get(row["action"], row["action"]),
+                "entity_type": AUDIT_ENTITY_LABELS.get(row["entity_type"], row["entity_type"]),
+                "entity_label": row["entity_label"]
+                or AUDIT_ENTITY_LABELS.get(row["entity_type"], row["entity_type"]),
+                "change": change_text,
+                "actor_ip": row["actor_ip"] or "-",
+            }
+        )
+    return entries
+
+
 def is_safe_redirect_target(target):
     if not target:
         return False
@@ -686,6 +836,13 @@ def login():
             dest = request.args.get("next")
             if not is_safe_redirect_target(dest):
                 dest = url_for("index")
+            record_audit_event(
+                "login_success",
+                "auth",
+                entity_label="Panel",
+                new_value="ok",
+                details={"next": dest},
+            )
             return redirect(dest)
         if client_ip and client_ip != "unknown":
             record_login_attempt(DB_PATH, client_ip)
@@ -722,6 +879,14 @@ def setup_password():
             flash("Hasła nie są zgodne.", "error")
             return render_setup_password()
         set_setting(DB_PATH, "password_hash", generate_password_hash(password))
+        record_audit_event(
+            "password_setup",
+            "security",
+            entity_label="Hasło panelu",
+            old_value="brak",
+            new_value="ustawione",
+            details={"setup_token_required": setup_token_required()},
+        )
         flash("Hasło ustawione. Zaloguj się.", "success")
         return redirect(url_for("login"))
     if not APP_SETUP_TOKEN and not is_local_setup_request():
@@ -882,8 +1047,23 @@ def settings():
     if request.method == "POST":
         action = request.form.get("action")
         if action == "email":
+            current_email_settings = get_email_settings_snapshot()
             smtp_password = request.form.get("smtp_password")
             clear_smtp_password = request.form.get("smtp_password_clear") == "1"
+            new_email_settings = {
+                "smtp_host": request.form.get("smtp_host") or "",
+                "smtp_port": request.form.get("smtp_port") or "",
+                "smtp_user": request.form.get("smtp_user") or "",
+                "smtp_use_tls": request.form.get("smtp_use_tls") or "0",
+                "smtp_use_ssl": request.form.get("smtp_use_ssl") or "0",
+                "smtp_from": request.form.get("smtp_from") or "",
+                "smtp_to": request.form.get("smtp_to") or "",
+                "has_password": (
+                    False
+                    if clear_smtp_password
+                    else bool(smtp_password) or current_email_settings["has_password"]
+                ),
+            }
             set_setting(DB_PATH, "smtp_host", request.form.get("smtp_host") or "")
             set_setting(DB_PATH, "smtp_port", request.form.get("smtp_port") or "")
             set_setting(DB_PATH, "smtp_user", request.form.get("smtp_user") or "")
@@ -895,10 +1075,27 @@ def settings():
             set_setting(DB_PATH, "smtp_use_ssl", request.form.get("smtp_use_ssl") or "0")
             set_setting(DB_PATH, "smtp_from", request.form.get("smtp_from") or "")
             set_setting(DB_PATH, "smtp_to", request.form.get("smtp_to") or "")
+            record_audit_event(
+                "email_settings_update",
+                "email",
+                entity_label="Ustawienia SMTP",
+                old_value=summarize_email_settings_snapshot(current_email_settings),
+                new_value=summarize_email_settings_snapshot(new_email_settings),
+            )
             flash("Ustawienia email zapisane.", "success")
         elif action == "api":
+            current_api_settings = get_api_settings_snapshot()
             api_client_secret = request.form.get("apilo_client_secret")
             clear_api_client_secret = request.form.get("apilo_client_secret_clear") == "1"
+            new_api_settings = {
+                "apilo_base_url": request.form.get("apilo_base_url") or "",
+                "apilo_client_id": request.form.get("apilo_client_id") or "",
+                "has_client_secret": (
+                    False
+                    if clear_api_client_secret
+                    else bool(api_client_secret) or current_api_settings["has_client_secret"]
+                ),
+            }
             set_setting(DB_PATH, "apilo_base_url", request.form.get("apilo_base_url") or "")
             set_setting(DB_PATH, "apilo_client_id", request.form.get("apilo_client_id") or "")
             if clear_api_client_secret:
@@ -906,17 +1103,40 @@ def settings():
             elif api_client_secret:
                 set_setting(DB_PATH, "apilo_client_secret", api_client_secret)
             auth_code = request.form.get("apilo_auth_code") or ""
+            token_fetch_status = "skipped"
             if auth_code:
                 try:
                     client = get_client()
                     client._fetch_tokens("authorization_code", auth_code)
+                    token_fetch_status = "ok"
                     flash("Dane API zapisane i tokeny pobrane.", "success")
                 except Exception as exc:
                     app.logger.exception("API token fetch failed")
+                    token_fetch_status = "error"
                     flash(public_error_message(exc), "error")
             else:
                 flash("Ustawienia API Apilo zapisane.", "success")
+            record_audit_event(
+                "api_settings_update",
+                "api",
+                entity_label="Ustawienia API Apilo",
+                old_value=summarize_api_settings_snapshot(
+                    current_api_settings["apilo_base_url"],
+                    current_api_settings["apilo_client_id"],
+                    current_api_settings["has_client_secret"],
+                ),
+                new_value=summarize_api_settings_snapshot(
+                    new_api_settings["apilo_base_url"],
+                    new_api_settings["apilo_client_id"],
+                    new_api_settings["has_client_secret"],
+                ),
+                details={
+                    "auth_code_used": bool(auth_code),
+                    "token_fetch_status": token_fetch_status,
+                },
+            )
         elif action == "api_test":
+            previous_test_status = get_setting(DB_PATH, "api_test_status") or ""
             try:
                 client = get_client()
                 client.timeout = 10
@@ -924,11 +1144,27 @@ def settings():
                 set_setting(DB_PATH, "api_test_status", "ok")
                 set_setting(DB_PATH, "api_test_message", "Połączenie działa.")
                 set_setting(DB_PATH, "api_test_at", utc_now_iso())
+                record_audit_event(
+                    "api_connection_test",
+                    "api",
+                    entity_label="Test połączenia API",
+                    old_value=previous_test_status or None,
+                    new_value="ok",
+                    details={"message": "Połączenie działa."},
+                )
                 flash("Połączenie działa.", "success")
             except requests.exceptions.Timeout:
                 set_setting(DB_PATH, "api_test_status", "error")
                 set_setting(DB_PATH, "api_test_message", "Timeout połączenia z API.")
                 set_setting(DB_PATH, "api_test_at", utc_now_iso())
+                record_audit_event(
+                    "api_connection_test",
+                    "api",
+                    entity_label="Test połączenia API",
+                    old_value=previous_test_status or None,
+                    new_value="error",
+                    details={"message": "Timeout połączenia z API."},
+                )
                 flash("Timeout połączenia z API.", "error")
             except Exception as exc:
                 app.logger.exception("API connection test failed")
@@ -936,16 +1172,40 @@ def settings():
                 set_setting(DB_PATH, "api_test_status", "error")
                 set_setting(DB_PATH, "api_test_message", message)
                 set_setting(DB_PATH, "api_test_at", utc_now_iso())
+                record_audit_event(
+                    "api_connection_test",
+                    "api",
+                    entity_label="Test połączenia API",
+                    old_value=previous_test_status or None,
+                    new_value="error",
+                    details={"message": message},
+                )
                 flash(message, "error")
         elif action == "allegro":
+            current_price_list_id = get_setting(DB_PATH, "allegro_price_list_id") or ""
             allegro_price_list_id = parse_int_value(
                 request.form.get("allegro_price_list_id"), 20, min_value=1
             )
             set_setting(DB_PATH, "allegro_price_list_id", str(allegro_price_list_id))
+            record_audit_event(
+                "allegro_settings_update",
+                "settings",
+                entity_label="Cennik Allegro",
+                old_value=current_price_list_id or None,
+                new_value=str(allegro_price_list_id),
+            )
             flash("Ustawienia Allegro zapisane.", "success")
         elif action == "email_test":
             try:
                 send_test_email()
+                record_audit_event(
+                    "email_test_send",
+                    "email",
+                    entity_label="Email testowy",
+                    new_value=get_setting(DB_PATH, "smtp_to")
+                    or get_setting(DB_PATH, "smtp_user")
+                    or "-",
+                )
                 flash("Wysłano testowy email.", "success")
             except Exception as exc:
                 app.logger.exception("Email test failed")
@@ -959,6 +1219,12 @@ def settings():
                     send_low_stock_alert_email(alert_rows)
                     set_setting(DB_PATH, "alerts_low_stock_sent_at", utc_now_iso())
                     set_setting(DB_PATH, "alerts_low_stock_sent_count", str(len(alert_rows)))
+                    record_audit_event(
+                        "low_stock_alert_send",
+                        "email",
+                        entity_label="Alert niskich stanów",
+                        new_value=f"{len(alert_rows)} pozycji",
+                    )
                     flash(f"Wysłano alert niskich stanów ({len(alert_rows)} pozycji).", "success")
             except Exception as exc:
                 app.logger.exception("Low stock alert email failed")
@@ -972,8 +1238,18 @@ def settings():
                 flash("Hasła nie są zgodne.", "error")
             else:
                 set_setting(DB_PATH, "password_hash", generate_password_hash(password))
+                record_audit_event(
+                    "password_change",
+                    "security",
+                    entity_label="Hasło panelu",
+                    old_value="ustawione",
+                    new_value="zmienione",
+                )
                 flash("Hasło zostało zmienione.", "success")
         elif action == "suggestions":
+            current_lead_time = get_suggest_lead_time_days()
+            current_safety_pct = get_suggest_safety_pct()
+            current_suggest_days = get_suggest_days()
             lead_time = parse_int_value(request.form.get("lead_time_days"), 1, min_value=1)
             safety_pct = parse_float_value(request.form.get("safety_pct"), 20.0, min_value=0.0)
             suggest_days = parse_int_value(request.form.get("suggest_days"), 30, min_value=1)
@@ -982,11 +1258,33 @@ def settings():
             set_setting(DB_PATH, "suggest_lead_time_days", str(lead_time))
             set_setting(DB_PATH, "suggest_safety_pct", str(safety_pct))
             set_setting(DB_PATH, "suggest_days", str(suggest_days))
+            record_audit_event(
+                "suggestions_settings_update",
+                "settings",
+                entity_label="Sugestie stanów",
+                old_value=summarize_suggestions_settings_snapshot(
+                    current_lead_time,
+                    current_safety_pct,
+                    current_suggest_days,
+                ),
+                new_value=summarize_suggestions_settings_snapshot(
+                    lead_time,
+                    safety_pct,
+                    suggest_days,
+                ),
+            )
             flash("Ustawienia sugestii zapisane.", "success")
         elif action == "suggestions_refresh":
             try:
                 refreshed = run_suggestions_refresh_with_lock(blocking=False, force_year=True)
                 if refreshed:
+                    record_audit_event(
+                        "suggestions_refresh",
+                        "settings",
+                        entity_label="Sugestie stanów",
+                        new_value="odświeżone",
+                        details={"force_year": True},
+                    )
                     flash("Sugestie stanów odświeżone.", "success")
                 else:
                     flash("Synchronizacja jest już w toku. Spróbuj ponownie za chwilę.", "info")
@@ -994,26 +1292,42 @@ def settings():
                 app.logger.exception("Suggestions refresh failed")
                 flash(public_error_message(exc), "error")
         elif action == "inventory_value":
+            previous_store_total = get_setting(DB_PATH, "inventory_value_store") or ""
+            previous_allegro_total = get_setting(DB_PATH, "inventory_value_allegro") or ""
             try:
                 store_total, allegro_total = get_inventory_value_totals(DB_PATH)
                 set_setting(DB_PATH, "inventory_value_store", f"{store_total:.2f}")
                 set_setting(DB_PATH, "inventory_value_allegro", f"{allegro_total:.2f}")
                 set_setting(DB_PATH, "inventory_value_at", utc_now_iso())
+                record_audit_event(
+                    "inventory_value_refresh",
+                    "settings",
+                    entity_label="Wartość magazynu",
+                    old_value=summarize_inventory_values_snapshot(
+                        previous_store_total,
+                        previous_allegro_total,
+                    ),
+                    new_value=summarize_inventory_values_snapshot(
+                        f"{store_total:.2f}",
+                        f"{allegro_total:.2f}",
+                    ),
+                )
                 flash("Przeliczono wartość magazynu.", "success")
             except Exception as exc:
                 app.logger.exception("Inventory value calculation failed")
                 flash(public_error_message(exc), "error")
         return redirect(url_for("settings"))
 
+    email_snapshot = get_email_settings_snapshot()
     email_settings = {
-        "smtp_host": get_setting(DB_PATH, "smtp_host") or "",
-        "smtp_port": get_setting(DB_PATH, "smtp_port") or "",
-        "smtp_user": get_setting(DB_PATH, "smtp_user") or "",
-        "has_smtp_password": bool(get_setting(DB_PATH, "smtp_password")),
-        "smtp_use_tls": get_setting(DB_PATH, "smtp_use_tls") or "0",
-        "smtp_use_ssl": get_setting(DB_PATH, "smtp_use_ssl") or "0",
-        "smtp_from": get_setting(DB_PATH, "smtp_from") or "",
-        "smtp_to": get_setting(DB_PATH, "smtp_to") or "",
+        "smtp_host": email_snapshot["smtp_host"],
+        "smtp_port": email_snapshot["smtp_port"],
+        "smtp_user": email_snapshot["smtp_user"],
+        "has_smtp_password": email_snapshot["has_password"],
+        "smtp_use_tls": email_snapshot["smtp_use_tls"],
+        "smtp_use_ssl": email_snapshot["smtp_use_ssl"],
+        "smtp_from": email_snapshot["smtp_from"],
+        "smtp_to": email_snapshot["smtp_to"],
     }
     api_settings = {
         "apilo_base_url": get_setting(DB_PATH, "apilo_base_url") or "",
@@ -1069,6 +1383,7 @@ def settings():
         show_api_form=show_api_form,
         inventory_values=inventory_values,
         low_stock_alerts=low_stock_alerts,
+        audit_entries=build_recent_audit_entries(limit=40),
         suggest_lead_time_days=get_suggest_lead_time_days(),
         suggest_safety_pct=get_suggest_safety_pct(),
         suggest_days=get_suggest_days(),
@@ -1104,7 +1419,17 @@ def update_quantity(product_id):
             flash("Brak identyfikatora Apilo.", "error")
             return redirect(next_url)
         client.update_quantities([payload])
+        previous_quantity = target["quantity"]
         update_product_quantity(DB_PATH, product_id, quantity)
+        record_audit_event(
+            "product_quantity_update",
+            "product",
+            entity_id=product_id,
+            entity_label=target["name"] or target["sku"] or f"Produkt {product_id}",
+            old_value=str(previous_quantity) if previous_quantity is not None else "brak",
+            new_value=str(quantity),
+            details={"sku": target["sku"] or "", "ean": target["ean"] or ""},
+        )
         flash("Stan zaktualizowany w Apilo.", "success")
     except Exception as exc:
         app.logger.exception("Quantity update failed")
@@ -1120,6 +1445,12 @@ def sync_pull():
         if count is None:
             flash("Synchronizacja jest już w toku. Spróbuj ponownie za chwilę.", "info")
         else:
+            record_audit_event(
+                "manual_sync_pull",
+                "sync",
+                entity_label="Pobranie produktów",
+                new_value=f"{count} produktów",
+            )
             flash(f"Pobrano {count} produktów z Apilo.", "success")
     except Exception as exc:
         app.logger.exception("Manual sync pull failed")
