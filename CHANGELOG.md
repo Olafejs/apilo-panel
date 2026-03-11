@@ -16,6 +16,13 @@ All important changes should be tracked here together with the application versi
 
 - Additional validation coverage for SMTP fields.
 
+## [1.0.38] - 2026-03-11
+
+### Changed
+
+- Unified the public project name to `Apilo Panel Stanow Magazynowych` across `README.md`, UI templates, release metadata, and email subjects.
+- Added shared project metadata in `app_config.py` so the application uses one consistent project name and description.
+
 ## [1.0.37] - 2026-03-11
 
 ### Added

@@ -65,6 +65,14 @@ def test_setup_password_blocks_remote_request_without_setup_token(client):
     )
 
 
+def test_setup_password_page_shows_project_name(client):
+    response = client.get("/setup-password")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "Apilo Panel Stanow Magazynowych" in html
+
+
 def test_alert_settings_save_and_render(app_module, logged_in_client):
     response = logged_in_client.post(
         "/settings",

@@ -1,8 +1,12 @@
-# GitHub Public Release Notes
+# GitHub Project Metadata
+
+## Suggested project display name
+
+`Apilo Panel Stanow Magazynowych`
 
 ## Suggested repository description
 
-Lekki panel WWW do pracy na stanach magazynowych z Apilo.
+Panel WWW do pracy na stanach magazynowych z Apilo.
 
 ## Suggested topics
 
@@ -17,14 +21,14 @@ Lekki panel WWW do pracy na stanach magazynowych z Apilo.
 
 ## Suggested release title
 
-`v1.0.37`
+`v1.0.38`
 
 ## Suggested release notes
 
 ```md
-## Apilo Panel v1.0.37
+## Apilo Panel Stanow Magazynowych v1.0.38
 
-Public release of the project with refreshed repository metadata and contributor-facing GitHub setup.
+Repository polish release with unified project naming and cleaner public-facing metadata.
 
 ### Included
 
@@ -33,11 +37,11 @@ Public release of the project with refreshed repository metadata and contributor
 - encrypted secret storage in SQLite
 - sync status, sales report, CSV export, alerts, and audit history
 - pytest suite and GitHub Actions CI
-- refreshed `README`, `CONTRIBUTING`, `SECURITY`, issue templates, and release config
+- refreshed `README`, templates, mail subjects, and release metadata with the final project name
 
 ### Validation
 
-- `33 passed`
+- `34 passed`
 - `/healthz` returns `ok`
 - API connectivity smoke test passes
 ```

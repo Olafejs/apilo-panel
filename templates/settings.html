@@ -2,8 +2,9 @@
 <html lang="pl">
   <head>
     <meta charset="utf-8">
-    <title>Apilo - Ustawienia</title>
+    <title>{{ project_name }} - Ustawienia</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="{{ project_description }}">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   </head>
@@ -12,7 +13,7 @@
       <header class="topbar">
         <div>
           <h1>Ustawienia</h1>
-          <p class="subtle">Konfiguracja panelu i integracji</p>
+          <p class="subtle">{{ project_name }} · konfiguracja panelu i integracji</p>
         </div>
         <div class="actions">
           <a class="btn" href="{{ url_for('index') }}">Powrót</a>

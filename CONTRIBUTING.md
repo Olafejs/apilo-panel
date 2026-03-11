@@ -1,6 +1,6 @@
 # Contributing
 
-Projekt jest mały, więc zmiany powinny też być małe i konkretne.
+Projekt Apilo Panel Stanow Magazynowych jest mały, więc zmiany powinny też być małe i konkretne.
 
 ## Zasady
 

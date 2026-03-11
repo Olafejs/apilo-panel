@@ -2,8 +2,9 @@
 <html lang="pl">
   <head>
     <meta charset="utf-8">
-    <title>Apilo - Stany magazynowe</title>
+    <title>{{ project_name }} - Stany magazynowe</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="{{ project_description }}">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   </head>
@@ -11,8 +12,8 @@
     <div class="container">
     <header class="topbar">
       <div>
-        <h1>Stany magazynowe</h1>
-        <p class="subtle">Apilo + lokalny panel SQLite</p>
+        <h1>{{ project_name }}</h1>
+        <p class="subtle">{{ project_description }}</p>
       </div>
       <div class="actions">
         <a class="btn" href="{{ url_for('settings') }}">Ustawienia</a>

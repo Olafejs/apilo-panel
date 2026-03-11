@@ -55,6 +55,8 @@ APP_HOST = os.getenv("APP_HOST", "127.0.0.1")
 APP_PORT = parse_int_value(os.getenv("APP_PORT"), 5000, min_value=1, max_value=65535)
 DEBUG_MODE = os.getenv("FLASK_DEBUG") == "1"
 APP_VERSION = read_version(BASE_DIR)
+PROJECT_NAME = "Apilo Panel Stanow Magazynowych"
+PROJECT_DESCRIPTION = "Panel WWW do pracy na stanach magazynowych z Apilo."
 
 
 def resolve_flask_secret_key():

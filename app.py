@@ -80,6 +80,8 @@ from app_config import (
     LOGIN_RATE_LIMIT_MAX_ATTEMPTS,
     LOGIN_RATE_LIMIT_WINDOW_SECONDS,
     LOG_DIR,
+    PROJECT_DESCRIPTION,
+    PROJECT_NAME,
     REFRESH_INTERVAL_SECONDS,
     SALES_CACHE_REFRESH_INTERVAL_SECONDS,
     SALES_YEAR_REFRESH_INTERVAL_SECONDS,
@@ -1610,6 +1612,8 @@ def inject_now():
         "now_human": now.strftime("%Y-%m-%d %H:%M:%S"),
         "csrf_token": get_csrf_token,
         "app_version": APP_VERSION,
+        "project_name": PROJECT_NAME,
+        "project_description": PROJECT_DESCRIPTION,
     }
 
 
@@ -1678,12 +1682,15 @@ def send_email_message(subject, body):
 
 
 def send_test_email():
-    send_email_message("Apilo - test email", "Test konfiguracji SMTP z panelu Apilo.")
+    send_email_message(
+        f"{PROJECT_NAME} - test email",
+        f"Test konfiguracji SMTP z projektu {PROJECT_NAME}.",
+    )
 
 
 def send_low_stock_alert_email(rows):
     lines = [
-        "Alert niskich stanow - Apilo Panel",
+        f"Alert niskich stanow - {PROJECT_NAME}",
         "",
         f"Liczba pozycji: {len(rows)}",
         "",
@@ -1698,7 +1705,7 @@ def send_low_stock_alert_email(rows):
                 shortage=row["shortage_qty"],
             )
         )
-    send_email_message("Apilo - alert niskich stanow", "\n".join(lines))
+    send_email_message(f"{PROJECT_NAME} - alert niskich stanow", "\n".join(lines))
 
 
 @app.get("/thumb/<int:apilo_id>")

@@ -2,8 +2,9 @@
 <html lang="pl">
   <head>
     <meta charset="utf-8">
-    <title>Apilo - Raport sprzedaży</title>
+    <title>{{ project_name }} - Raport sprzedaży</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="{{ project_description }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   </head>
   <body>
@@ -12,7 +13,7 @@
       <div>
         <h1>Raport sprzedaży</h1>
         <p class="subtle">
-          Ostatnie {{ days }} dni ·
+          {{ project_name }} · ostatnie {{ days }} dni ·
           {% if realized_only %}
             opłacone{% if realized_filter %} i zrealizowane{% else %} (fallback do wszystkich opłaconych){% endif %}
           {% else %}
