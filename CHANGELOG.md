@@ -16,6 +16,17 @@ All important changes should be tracked here together with the application versi
 
 - Additional validation coverage for SMTP fields.
 
+## [1.0.31] - 2026-03-11
+
+### Added
+
+- Added unit tests for extracted audit and settings helpers.
+
+### Changed
+
+- Extracted audit formatting, audit persistence, secret storage payloads, and settings snapshot helpers into `app_admin.py`.
+- Reduced `app.py` by moving admin-oriented helper code behind a small request-aware audit wrapper.
+
 ## [1.0.30] - 2026-03-11
 
 ### Added

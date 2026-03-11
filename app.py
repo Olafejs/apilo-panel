@@ -29,6 +29,17 @@ from flask import (
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from apilo import ApiloClient
+from app_admin import (
+    build_recent_audit_entries,
+    build_secret_storage_payload,
+    get_api_settings_snapshot,
+    get_email_settings_snapshot,
+    summarize_api_settings_snapshot,
+    summarize_email_settings_snapshot,
+    summarize_inventory_values_snapshot,
+    summarize_suggestions_settings_snapshot,
+    write_audit_event,
+)
 from app_config import (
     APP_HOST,
     APP_PASSWORD,
@@ -80,7 +91,6 @@ from db import (
     get_sales_year_map,
     get_setting,
     migrate_secret_storage,
-    record_audit_log,
     set_setting,
     save_sales_cache,
     save_sales_year_cache,
@@ -187,19 +197,6 @@ def get_config_value(env_key, setting_key, default=None):
         return env_value
     setting_value = get_setting(DB_PATH, setting_key)
     return setting_value if setting_value is not None else default
-
-
-def build_secret_storage_payload():
-    backend = SECRET_STORAGE_STATUS.get("backend") or "file"
-    if backend == "env":
-        return {
-            "mode_label": "Klucz z .env",
-            "location": "SETTINGS_ENCRYPTION_KEY",
-        }
-    return {
-        "mode_label": "Plik klucza",
-        "location": SECRET_STORAGE_STATUS.get("key_path") or "settings.key",
-    }
 
 
 def normalize_base_url(value):
@@ -760,99 +757,6 @@ def build_low_stock_alert_history(limit=10):
     return history
 
 
-AUDIT_ACTION_LABELS = {
-    "login_success": "Logowanie",
-    "password_setup": "Pierwsze hasło",
-    "password_change": "Zmiana hasła",
-    "email_settings_update": "Ustawienia SMTP",
-    "email_test_send": "Email testowy",
-    "api_settings_update": "Ustawienia API",
-    "api_connection_test": "Test API",
-    "allegro_settings_update": "Cennik Allegro",
-    "suggestions_settings_update": "Ustawienia sugestii",
-    "suggestions_refresh": "Przeliczenie sugestii",
-    "inventory_value_refresh": "Przeliczenie wartości",
-    "products_export_csv": "Eksport CSV",
-    "low_stock_alert_settings_update": "Auto alert stanów",
-    "low_stock_alert_send": "Alert niskich stanów",
-    "product_quantity_update": "Zmiana stanu",
-    "manual_sync_pull": "Pobranie z Apilo",
-}
-
-AUDIT_ENTITY_LABELS = {
-    "auth": "Logowanie",
-    "security": "Bezpieczeństwo",
-    "email": "Email",
-    "api": "API",
-    "settings": "Ustawienia",
-    "product": "Produkt",
-    "sync": "Synchronizacja",
-}
-
-
-def get_email_settings_snapshot():
-    return {
-        "smtp_host": get_setting(DB_PATH, "smtp_host") or "",
-        "smtp_port": get_setting(DB_PATH, "smtp_port") or "",
-        "smtp_user": get_setting(DB_PATH, "smtp_user") or "",
-        "smtp_use_tls": get_setting(DB_PATH, "smtp_use_tls") or "0",
-        "smtp_use_ssl": get_setting(DB_PATH, "smtp_use_ssl") or "0",
-        "smtp_from": get_setting(DB_PATH, "smtp_from") or "",
-        "smtp_to": get_setting(DB_PATH, "smtp_to") or "",
-        "has_password": bool(get_setting(DB_PATH, "smtp_password")),
-    }
-
-
-def get_api_settings_snapshot():
-    return {
-        "apilo_base_url": get_setting(DB_PATH, "apilo_base_url") or "",
-        "apilo_client_id": get_setting(DB_PATH, "apilo_client_id") or "",
-        "has_client_secret": bool(get_setting(DB_PATH, "apilo_client_secret")),
-    }
-
-
-def snapshot_value_text(value):
-    if value is None or value == "":
-        return "-"
-    return str(value)
-
-
-def summarize_email_settings_snapshot(values):
-    return (
-        f"host={values.get('smtp_host') or '-'} "
-        f"port={values.get('smtp_port') or '-'} "
-        f"user={values.get('smtp_user') or '-'} "
-        f"tls={values.get('smtp_use_tls') or '0'} "
-        f"ssl={values.get('smtp_use_ssl') or '0'} "
-        f"from={values.get('smtp_from') or '-'} "
-        f"to={values.get('smtp_to') or '-'} "
-        f"haslo={'set' if values.get('has_password') else 'empty'}"
-    )
-
-
-def summarize_api_settings_snapshot(base_url, client_id, has_secret):
-    return (
-        f"base={base_url or '-'} "
-        f"client_id={client_id or '-'} "
-        f"secret={'set' if has_secret else 'empty'}"
-    )
-
-
-def summarize_suggestions_settings_snapshot(lead_time_days, safety_pct, suggest_days):
-    return (
-        f"lead={snapshot_value_text(lead_time_days)} "
-        f"days={snapshot_value_text(suggest_days)} "
-        f"safety={snapshot_value_text(safety_pct)}%"
-    )
-
-
-def summarize_inventory_values_snapshot(store_value, allegro_value):
-    return (
-        f"sklep={snapshot_value_text(store_value)} "
-        f"allegro={snapshot_value_text(allegro_value)}"
-    )
-
-
 def record_audit_event(
     action,
     entity_type,
@@ -866,47 +770,18 @@ def record_audit_event(
     resolved_ip = actor_ip
     if resolved_ip is None:
         resolved_ip = get_client_ip() if has_request_context() else ""
-    try:
-        record_audit_log(
-            DB_PATH,
-            action=action,
-            entity_type=entity_type,
-            entity_id=entity_id,
-            entity_label=entity_label,
-            old_value=old_value,
-            new_value=new_value,
-            details=details,
-            actor_ip=resolved_ip,
-        )
-    except Exception:
-        app.logger.exception("Audit log write failed for action=%s", action)
-
-
-def build_recent_audit_entries(limit=40):
-    entries = []
-    for row in get_recent_audit_log(DB_PATH, limit=limit):
-        old_value = (row["old_value"] or "").strip()
-        new_value = (row["new_value"] or "").strip()
-        if old_value and new_value and old_value != new_value:
-            change_text = f"{old_value} -> {new_value}"
-        elif new_value:
-            change_text = new_value
-        elif old_value:
-            change_text = old_value
-        else:
-            change_text = "-"
-        entries.append(
-            {
-                "created_at": format_pull_time(row["created_at"]),
-                "action": AUDIT_ACTION_LABELS.get(row["action"], row["action"]),
-                "entity_type": AUDIT_ENTITY_LABELS.get(row["entity_type"], row["entity_type"]),
-                "entity_label": row["entity_label"]
-                or AUDIT_ENTITY_LABELS.get(row["entity_type"], row["entity_type"]),
-                "change": change_text,
-                "actor_ip": row["actor_ip"] or "-",
-            }
-        )
-    return entries
+    write_audit_event(
+        DB_PATH,
+        app.logger,
+        action=action,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        entity_label=entity_label,
+        old_value=old_value,
+        new_value=new_value,
+        details=details,
+        actor_ip=resolved_ip,
+    )
 
 
 def is_safe_redirect_target(target):
@@ -1273,7 +1148,7 @@ def settings():
     if request.method == "POST":
         action = request.form.get("action")
         if action == "email":
-            current_email_settings = get_email_settings_snapshot()
+            current_email_settings = get_email_settings_snapshot(DB_PATH)
             smtp_password = request.form.get("smtp_password")
             clear_smtp_password = request.form.get("smtp_password_clear") == "1"
             new_email_settings = {
@@ -1310,7 +1185,7 @@ def settings():
             )
             flash("Ustawienia email zapisane.", "success")
         elif action == "api":
-            current_api_settings = get_api_settings_snapshot()
+            current_api_settings = get_api_settings_snapshot(DB_PATH)
             api_client_secret = request.form.get("apilo_client_secret")
             clear_api_client_secret = request.form.get("apilo_client_secret_clear") == "1"
             new_api_settings = {
@@ -1573,7 +1448,7 @@ def settings():
                 flash(public_error_message(exc), "error")
         return redirect(url_for("settings"))
 
-    email_snapshot = get_email_settings_snapshot()
+    email_snapshot = get_email_settings_snapshot(DB_PATH)
     email_settings = {
         "smtp_host": email_snapshot["smtp_host"],
         "smtp_port": email_snapshot["smtp_port"],
@@ -1648,10 +1523,10 @@ def settings():
         api_locked=api_locked,
         api_edit_mode=api_edit_mode,
         show_api_form=show_api_form,
-        secret_storage=build_secret_storage_payload(),
+        secret_storage=build_secret_storage_payload(SECRET_STORAGE_STATUS),
         inventory_values=inventory_values,
         low_stock_alerts=low_stock_alerts,
-        audit_entries=build_recent_audit_entries(limit=40),
+        audit_entries=build_recent_audit_entries(DB_PATH, limit=40),
         suggest_lead_time_days=get_suggest_lead_time_days(),
         suggest_safety_pct=get_suggest_safety_pct(),
         suggest_days=get_suggest_days(),
