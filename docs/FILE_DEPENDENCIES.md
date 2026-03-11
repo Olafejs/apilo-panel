@@ -38,8 +38,11 @@
 | `README.md` | szybki start i konfiguracja |
 | `CONTRIBUTING.md` | zasady zmian w repo |
 | `SECURITY.md` | zgłaszanie podatności |
+| `.github/ISSUE_TEMPLATE/` | szablony issue dla publicznego repo |
+| `.github/release.yml` | kategorie automatycznych release notes na GitHubie |
 | `CHANGELOG.md` | historia release |
 | `VERSION` | wersja pokazywana w UI |
+| `docs/GITHUB_PUBLIC_RELEASE.md` | gotowy opis repo, topics i release notes do GitHub UI |
 | `docker-compose.yml` | lokalny i serwerowy deploy Docker |
 | `Dockerfile` | obraz produkcyjny |
 | `gunicorn.conf.py` | runtime `gunicorn` |

@@ -16,6 +16,18 @@ All important changes should be tracked here together with the application versi
 
 - Additional validation coverage for SMTP fields.
 
+## [1.0.37] - 2026-03-11
+
+### Added
+
+- Added GitHub issue templates for bugs and feature requests.
+- Added `.github/release.yml` and `docs/GITHUB_PUBLIC_RELEASE.md` for public repository release workflow.
+
+### Changed
+
+- Added public GitHub badges to `README.md`.
+- Finalized repository metadata docs for public distribution.
+
 ## [1.0.36] - 2026-03-11
 
 ### Added

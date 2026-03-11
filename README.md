@@ -1,5 +1,9 @@
 # Apilo Panel
 
+[![CI](https://github.com/Olafejs/apilo-panel/actions/workflows/ci.yml/badge.svg)](https://github.com/Olafejs/apilo-panel/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/tag/Olafejs/apilo-panel?label=release)](https://github.com/Olafejs/apilo-panel/tags)
+[![License](https://img.shields.io/github/license/Olafejs/apilo-panel)](https://github.com/Olafejs/apilo-panel/blob/main/LICENSE)
+
 Lekki panel WWW do pracy na stanach magazynowych z Apilo.
 
 Najważniejsze funkcje:

@@ -28,6 +28,7 @@ python app.py
 - jeśli zmiana dotyczy deployu: `docker compose up -d --build`
 - jeśli zmiana jest user-facing: uzupełnij `CHANGELOG.md`
 - jeśli zmiana dotyczy konfiguracji: uzupełnij `README.md` i `.env.example`
+- jeśli zmiana dotyczy publicznego repo: sprawdź `.github/ISSUE_TEMPLATE/` i `docs/GITHUB_PUBLIC_RELEASE.md`
 
 ## Wersjonowanie
 
