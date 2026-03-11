@@ -15,11 +15,16 @@ def app_module(tmp_path, monkeypatch):
     monkeypatch.syspath_prepend(str(ROOT_DIR))
     monkeypatch.setenv("APILO_DB_PATH", str(tmp_path / "test.sqlite3"))
     monkeypatch.setenv("FLASK_SECRET_KEY", "test-secret-key")
+    monkeypatch.setenv(
+        "SETTINGS_ENCRYPTION_KEY",
+        "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
+    )
     monkeypatch.delenv("APP_PASSWORD", raising=False)
     monkeypatch.delenv("APP_SETUP_TOKEN", raising=False)
     monkeypatch.delenv("TRUST_X_FORWARDED_FOR", raising=False)
 
     sys.modules.pop("app", None)
+    sys.modules.pop("db", None)
     app_module = importlib.import_module("app")
     app_module.app.config.update(TESTING=True)
     app_module.update_sync_status(

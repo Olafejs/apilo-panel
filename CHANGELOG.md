@@ -16,6 +16,19 @@ All important changes should be tracked here together with the application versi
 
 - Additional validation coverage for SMTP fields.
 
+## [1.0.27] - 2026-03-11
+
+### Added
+
+- Added transparent encryption at rest for SMTP passwords, API client secrets, Flask secret key, and stored OAuth tokens.
+- Added automatic migration of legacy plaintext secrets on startup.
+- Added a settings view that shows where the encryption key is sourced from.
+
+### Changed
+
+- The app now creates or uses a dedicated secret key file (`settings.key`) when `SETTINGS_ENCRYPTION_KEY` is not provided in the environment.
+- Documentation and tests now cover encrypted secret storage and token migration.
+
 ## [1.0.26] - 2026-03-11
 
 ### Added

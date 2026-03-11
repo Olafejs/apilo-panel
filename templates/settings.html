@@ -354,6 +354,22 @@
           <p>Konfiguracja email i hasła do panelu.</p>
         </div>
 
+        <div class="card full">
+          <div class="card-head">
+            <div>
+              <h2>Sekrety i klucz szyfrowania</h2>
+              <p class="card-desc">Hasła SMTP, sekrety API i tokeny są szyfrowane przed zapisem do bazy SQLite.</p>
+            </div>
+          </div>
+          <div class="details-stats">
+            <div>Tryb klucza: <strong>{{ secret_storage.mode_label }}</strong></div>
+            <div>Lokalizacja: <strong>{{ secret_storage.location }}</strong></div>
+          </div>
+          <div class="details-text">
+            Przy backupie bazy zachowaj też ten klucz. Bez niego odszyfrowanie zapisanych sekretów nie będzie możliwe.
+          </div>
+        </div>
+
         <div class="card">
           <div class="card-head">
             <div>

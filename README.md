@@ -62,6 +62,8 @@ docker compose down
 - najlepiej ustaw `APP_PASSWORD` od razu w `.env`
 - jesli `APP_PASSWORD` jest puste, pierwsze ustawienie hasla bez `APP_SETUP_TOKEN` zadziala tylko lokalnie
 - jesli chcesz ustawic haslo zdalnie, tymczasowo ustaw `APP_SETUP_TOKEN`
+- sekrety w SQLite sa szyfrowane; jesli nie podasz `SETTINGS_ENCRYPTION_KEY`, aplikacja utworzy lokalny plik klucza obok bazy (`settings.key`)
+- przy backupie lub przenoszeniu instancji zachowaj razem baze i plik `settings.key`, albo ustaw stale `SETTINGS_ENCRYPTION_KEY` w `.env`
 
 ## Konfiguracja Apilo
 
@@ -83,6 +85,8 @@ Jesli konfigurujesz API z panelu, zostaw pola `APILO_*` puste w `.env`.
 
 ```ini
 FLASK_SECRET_KEY=change-me
+SETTINGS_ENCRYPTION_KEY=
+SETTINGS_ENCRYPTION_KEY_PATH=
 APP_PASSWORD=
 APP_SETUP_TOKEN=
 APILO_DB_PATH=apilo.sqlite3

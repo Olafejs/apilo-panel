@@ -26,6 +26,7 @@ static/thumbs/
 # Local database snapshots
 apilo.sqlite3
 *.sqlite3
+settings.key
 
 # OS files
 .DS_Store

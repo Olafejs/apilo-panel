@@ -3,9 +3,105 @@ import json
 import sqlite3
 from datetime import datetime, timezone
 
+from cryptography.fernet import Fernet, InvalidToken
+
+
+ENCRYPTED_VALUE_PREFIX = "enc:v1:"
+SECRET_SETTING_KEYS = {
+    "apilo_client_secret",
+    "flask_secret_key",
+    "smtp_password",
+}
+SECRET_TOKEN_COLUMNS = ("access_token", "refresh_token")
+SECRET_CIPHER_CACHE = {}
+
 
 def utc_now_iso():
     return datetime.now(timezone.utc).isoformat()
+
+
+def _default_secret_key_path(db_path):
+    override = (os.getenv("SETTINGS_ENCRYPTION_KEY_PATH") or "").strip()
+    if override:
+        return override
+    db_dir = os.path.dirname(os.path.abspath(db_path))
+    return os.path.join(db_dir, "settings.key")
+
+
+def _load_secret_key_material(db_path):
+    env_key = (os.getenv("SETTINGS_ENCRYPTION_KEY") or "").strip()
+    if env_key:
+        return env_key.encode("utf-8"), "env", ""
+
+    key_path = _default_secret_key_path(db_path)
+    key_dir = os.path.dirname(os.path.abspath(key_path))
+    if key_dir:
+        os.makedirs(key_dir, exist_ok=True)
+    if not os.path.exists(key_path):
+        key_bytes = Fernet.generate_key()
+        with open(key_path, "wb") as handle:
+            handle.write(key_bytes)
+        os.chmod(key_path, 0o600)
+        return key_bytes, "file", key_path
+    with open(key_path, "rb") as handle:
+        return handle.read().strip(), "file", key_path
+
+
+def _get_secret_cipher_state(db_path):
+    cache_key = (
+        os.path.abspath(db_path),
+        os.getenv("SETTINGS_ENCRYPTION_KEY", ""),
+        os.getenv("SETTINGS_ENCRYPTION_KEY_PATH", ""),
+    )
+    cached = SECRET_CIPHER_CACHE.get(cache_key)
+    if cached:
+        return cached
+    key_bytes, backend, key_path = _load_secret_key_material(db_path)
+    try:
+        cipher = Fernet(key_bytes)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("Nieprawidłowy klucz szyfrowania settings.") from exc
+    state = {
+        "cipher": cipher,
+        "backend": backend,
+        "key_path": key_path,
+    }
+    SECRET_CIPHER_CACHE[cache_key] = state
+    return state
+
+
+def get_secret_storage_status(db_path):
+    state = _get_secret_cipher_state(db_path)
+    return {
+        "enabled": True,
+        "backend": state["backend"],
+        "key_path": state["key_path"],
+    }
+
+
+def _encrypt_secret_value(db_path, value):
+    if value is None or value == "":
+        return value
+    raw_value = str(value)
+    if raw_value.startswith(ENCRYPTED_VALUE_PREFIX):
+        return raw_value
+    cipher = _get_secret_cipher_state(db_path)["cipher"]
+    token = cipher.encrypt(raw_value.encode("utf-8")).decode("utf-8")
+    return f"{ENCRYPTED_VALUE_PREFIX}{token}"
+
+
+def _decrypt_secret_value(db_path, value, *, context):
+    if value is None or value == "":
+        return value
+    raw_value = str(value)
+    if not raw_value.startswith(ENCRYPTED_VALUE_PREFIX):
+        return raw_value
+    cipher = _get_secret_cipher_state(db_path)["cipher"]
+    try:
+        decrypted = cipher.decrypt(raw_value[len(ENCRYPTED_VALUE_PREFIX) :].encode("utf-8"))
+    except InvalidToken as exc:
+        raise RuntimeError(f"Nie można odszyfrować sekretu: {context}.") from exc
+    return decrypted.decode("utf-8")
 
 
 def get_db(db_path):
@@ -143,11 +239,18 @@ def get_tokens(db_path):
     conn = get_db(db_path)
     row = conn.execute("SELECT * FROM tokens WHERE id = 1").fetchone()
     conn.close()
-    return dict(row) if row else None
+    if not row:
+        return None
+    result = dict(row)
+    for column in SECRET_TOKEN_COLUMNS:
+        result[column] = _decrypt_secret_value(db_path, result.get(column), context=f"tokens.{column}")
+    return result
 
 
 def save_tokens(db_path, tokens):
     now = utc_now_iso()
+    access_token = _encrypt_secret_value(db_path, tokens.get("access_token"))
+    refresh_token = _encrypt_secret_value(db_path, tokens.get("refresh_token"))
     conn = get_db(db_path)
     with conn:
         conn.execute(
@@ -168,9 +271,9 @@ def save_tokens(db_path, tokens):
                 updated_at = excluded.updated_at
             """,
             (
-                tokens.get("access_token"),
+                access_token,
                 tokens.get("access_token_expires_at"),
-                tokens.get("refresh_token"),
+                refresh_token,
                 tokens.get("refresh_token_expires_at"),
                 now,
             ),
@@ -858,11 +961,17 @@ def get_setting(db_path, key):
         (key,),
     ).fetchone()
     conn.close()
-    return row["value"] if row else None
+    if not row:
+        return None
+    value = row["value"]
+    if key in SECRET_SETTING_KEYS:
+        return _decrypt_secret_value(db_path, value, context=f"settings.{key}")
+    return value
 
 
 def set_setting(db_path, key, value):
     now = utc_now_iso()
+    stored_value = _encrypt_secret_value(db_path, value) if key in SECRET_SETTING_KEYS else value
     conn = get_db(db_path)
     with conn:
         conn.execute(
@@ -873,6 +982,59 @@ def set_setting(db_path, key, value):
                 value = excluded.value,
                 updated_at = excluded.updated_at
             """,
-            (key, value, now),
+            (key, stored_value, now),
         )
     conn.close()
+
+
+def migrate_secret_storage(db_path):
+    migrated = {"settings": 0, "tokens": 0}
+    now = utc_now_iso()
+    conn = get_db(db_path)
+    settings_rows = conn.execute(
+        """
+        SELECT key, value
+        FROM settings
+        WHERE key IN ({placeholders})
+        """.format(placeholders=", ".join("?" for _ in SECRET_SETTING_KEYS)),
+        tuple(sorted(SECRET_SETTING_KEYS)),
+    ).fetchall()
+    with conn:
+        for row in settings_rows:
+            raw_value = row["value"]
+            if not raw_value or str(raw_value).startswith(ENCRYPTED_VALUE_PREFIX):
+                continue
+            conn.execute(
+                """
+                UPDATE settings
+                SET value = ?, updated_at = ?
+                WHERE key = ?
+                """,
+                (_encrypt_secret_value(db_path, raw_value), now, row["key"]),
+            )
+            migrated["settings"] += 1
+        token_row = conn.execute("SELECT * FROM tokens WHERE id = 1").fetchone()
+        if token_row:
+            token_updates = {}
+            for column in SECRET_TOKEN_COLUMNS:
+                raw_value = token_row[column]
+                if raw_value and not str(raw_value).startswith(ENCRYPTED_VALUE_PREFIX):
+                    token_updates[column] = _encrypt_secret_value(db_path, raw_value)
+            if token_updates:
+                conn.execute(
+                    """
+                    UPDATE tokens
+                    SET access_token = COALESCE(?, access_token),
+                        refresh_token = COALESCE(?, refresh_token),
+                        updated_at = ?
+                    WHERE id = 1
+                    """,
+                    (
+                        token_updates.get("access_token"),
+                        token_updates.get("refresh_token"),
+                        now,
+                    ),
+                )
+                migrated["tokens"] = len(token_updates)
+    conn.close()
+    return migrated

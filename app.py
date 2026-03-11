@@ -33,6 +33,7 @@ from db import (
     count_recent_login_attempts,
     get_dashboard_metrics,
     get_recent_audit_log,
+    get_secret_storage_status,
     get_tokens,
     get_products,
     get_products_count,
@@ -44,6 +45,7 @@ from db import (
     get_sales_year_map,
     init_db,
     get_setting,
+    migrate_secret_storage,
     record_audit_log,
     set_setting,
     save_sales_cache,
@@ -203,6 +205,14 @@ if FLASK_SECRET_KEY_SOURCE == "generated":
     logging.getLogger(__name__).warning(
         "FLASK_SECRET_KEY nie ustawiony. Wygenerowano klucz i zapisano w settings (flask_secret_key)."
     )
+SECRET_MIGRATION_RESULT = migrate_secret_storage(DB_PATH)
+SECRET_STORAGE_STATUS = get_secret_storage_status(DB_PATH)
+if SECRET_MIGRATION_RESULT["settings"] or SECRET_MIGRATION_RESULT["tokens"]:
+    logging.getLogger(__name__).info(
+        "Migrated encrypted secrets settings=%s tokens=%s",
+        SECRET_MIGRATION_RESULT["settings"],
+        SECRET_MIGRATION_RESULT["tokens"],
+    )
 
 
 def read_version():
@@ -223,6 +233,19 @@ def get_config_value(env_key, setting_key, default=None):
         return env_value
     setting_value = get_setting(DB_PATH, setting_key)
     return setting_value if setting_value is not None else default
+
+
+def build_secret_storage_payload():
+    backend = SECRET_STORAGE_STATUS.get("backend") or "file"
+    if backend == "env":
+        return {
+            "mode_label": "Klucz z .env",
+            "location": "SETTINGS_ENCRYPTION_KEY",
+        }
+    return {
+        "mode_label": "Plik klucza",
+        "location": SECRET_STORAGE_STATUS.get("key_path") or "settings.key",
+    }
 
 
 def normalize_base_url(value):
@@ -1624,6 +1647,7 @@ def settings():
         api_locked=api_locked,
         api_edit_mode=api_edit_mode,
         show_api_form=show_api_form,
+        secret_storage=build_secret_storage_payload(),
         inventory_values=inventory_values,
         low_stock_alerts=low_stock_alerts,
         audit_entries=build_recent_audit_entries(limit=40),
