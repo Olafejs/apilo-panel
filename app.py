@@ -1,7 +1,5 @@
 import csv
-import hashlib
 import io
-import json
 import logging
 import os
 import secrets
@@ -26,6 +24,20 @@ from flask import (
 )
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from app_alerts import (
+    build_low_stock_alert_history as build_runtime_low_stock_alert_history,
+    format_item_count as format_alert_item_count,
+    format_position_count as format_alert_position_count,
+    get_low_stock_alert_enabled as get_runtime_low_stock_alert_enabled,
+    get_low_stock_alert_interval_hours as get_runtime_low_stock_alert_interval_hours,
+    get_low_stock_alert_next_check_iso as get_runtime_low_stock_alert_next_check_iso,
+    get_low_stock_rows as get_runtime_low_stock_rows,
+    is_low_stock_alert_due as is_runtime_low_stock_alert_due,
+    mark_low_stock_alert_error as mark_runtime_low_stock_alert_error,
+    process_low_stock_alert as process_runtime_low_stock_alert,
+    summarize_low_stock_alert_settings_snapshot as summarize_runtime_low_stock_alert_settings_snapshot,
+    update_low_stock_alert_state as update_runtime_low_stock_alert_state,
+)
 from app_auth import (
     get_csrf_token,
     is_safe_redirect_target,
@@ -104,8 +116,6 @@ from app_utils import (
     format_date_pl,
     format_pln,
     format_pull_time,
-    parse_bool_value,
-    parse_datetime_value,
     parse_float_value,
     parse_int_value,
     utc_now_iso,
@@ -113,7 +123,6 @@ from app_utils import (
 from db import (
     clear_login_attempts,
     get_dashboard_metrics,
-    get_recent_audit_log,
     get_secret_storage_status,
     get_products,
     get_products_count,
@@ -442,105 +451,51 @@ def get_allegro_price_list_id():
 
 
 def get_low_stock_rows(limit=10):
-    lead_time_days = get_suggest_lead_time_days()
-    safety_pct = get_suggest_safety_pct()
-    suggest_days = get_suggest_days()
-    rows = get_products(
+    return get_runtime_low_stock_rows(
         DB_PATH,
-        preset="shortage",
-        sort="shortage",
-        order="desc",
+        get_suggest_lead_time_days(),
+        get_suggest_safety_pct(),
+        get_suggest_days(),
         limit=limit,
-        offset=0,
-        lead_time_days=lead_time_days,
-        safety_pct=safety_pct,
-        suggest_days=suggest_days,
     )
-    result = []
-    for row in rows:
-        current_qty = row["quantity"] if row["quantity"] is not None else 0
-        suggested_qty = row["suggested_qty"] if row["suggested_qty"] is not None else 0
-        shortage_qty = row["shortage_qty"] if row["shortage_qty"] is not None else 0
-        result.append(
-            {
-                "name": row["name"] or "-",
-                "ean": row["ean"] or "",
-                "quantity": current_qty,
-                "suggested_qty": suggested_qty,
-                "shortage_qty": shortage_qty,
-            }
-        )
-    return result
 
 
 def get_low_stock_alert_enabled():
-    return parse_bool_value(get_setting(DB_PATH, "alerts_low_stock_enabled"), default=False)
+    return get_runtime_low_stock_alert_enabled(DB_PATH)
 
 
 def get_low_stock_alert_interval_hours():
-    return parse_int_value(
-        get_setting(DB_PATH, "alerts_low_stock_interval_hours"),
-        24,
-        min_value=1,
-        max_value=720,
-    )
+    return get_runtime_low_stock_alert_interval_hours(DB_PATH)
 
 
 def summarize_low_stock_alert_settings_snapshot(enabled, interval_hours):
-    return f"auto={'1' if enabled else '0'} interval={interval_hours}h"
+    return summarize_runtime_low_stock_alert_settings_snapshot(enabled, interval_hours)
 
 
 def format_item_count(count, singular, paucal, plural):
-    count = int(count or 0)
-    mod10 = count % 10
-    mod100 = count % 100
-    if count == 1:
-        word = singular
-    elif 2 <= mod10 <= 4 and not 12 <= mod100 <= 14:
-        word = paucal
-    else:
-        word = plural
-    return f"{count} {word}"
+    return format_alert_item_count(count, singular, paucal, plural)
 
 
 def format_position_count(count):
-    return format_item_count(count, "pozycja", "pozycje", "pozycji")
+    return format_alert_position_count(count)
 
 
 def get_low_stock_alert_next_check_iso():
-    if not get_low_stock_alert_enabled():
-        return ""
-    return compute_next_run_at(
-        get_setting(DB_PATH, "alerts_low_stock_last_check_at"),
-        get_low_stock_alert_interval_hours() * 3600,
-    )
+    return get_runtime_low_stock_alert_next_check_iso(DB_PATH, compute_next_run_at)
 
 
 def is_low_stock_alert_due(now=None):
-    if not get_low_stock_alert_enabled():
-        return False
-    scheduled_at = parse_datetime_value(get_low_stock_alert_next_check_iso())
-    if not scheduled_at:
-        return True
-    now = now or datetime.now(timezone.utc)
-    return scheduled_at <= now
+    return is_runtime_low_stock_alert_due(
+        DB_PATH,
+        compute_next_run_at,
+        now=now,
+    )
 
 
 def build_low_stock_alert_signature(rows):
-    normalized_rows = []
-    for row in rows:
-        normalized_rows.append(
-            {
-                "ean": row.get("ean") or "",
-                "name": row.get("name") or "",
-                "quantity": int(row.get("quantity") or 0),
-                "suggested_qty": int(row.get("suggested_qty") or 0),
-                "shortage_qty": int(row.get("shortage_qty") or 0),
-            }
-        )
-    normalized_rows.sort(key=lambda item: (item["ean"], item["name"]))
-    payload = json.dumps(normalized_rows, ensure_ascii=False, sort_keys=True)
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    from app_alerts import build_low_stock_alert_signature as build_runtime_low_stock_alert_signature
+
+    return build_runtime_low_stock_alert_signature(rows)
 
 
 def update_low_stock_alert_state(
@@ -552,80 +507,35 @@ def update_low_stock_alert_state(
     sent_count=None,
     sent_at=None,
 ):
-    checked_at = checked_at or utc_now_iso()
-    set_setting(DB_PATH, "alerts_low_stock_last_check_at", checked_at)
-    if result_message is not None:
-        set_setting(DB_PATH, "alerts_low_stock_last_result", result_message)
-    if error_message:
-        set_setting(DB_PATH, "alerts_low_stock_last_error", error_message)
-        set_setting(DB_PATH, "alerts_low_stock_last_error_at", checked_at)
-    else:
-        set_setting(DB_PATH, "alerts_low_stock_last_error", "")
-        set_setting(DB_PATH, "alerts_low_stock_last_error_at", "")
-    if signature is not None:
-        set_setting(DB_PATH, "alerts_low_stock_last_hash", signature)
-    if sent_at is not None:
-        set_setting(DB_PATH, "alerts_low_stock_sent_at", sent_at)
-    if sent_count is not None:
-        set_setting(DB_PATH, "alerts_low_stock_sent_count", str(sent_count))
+    update_runtime_low_stock_alert_state(
+        DB_PATH,
+        checked_at=checked_at,
+        result_message=result_message,
+        error_message=error_message,
+        signature=signature,
+        sent_count=sent_count,
+        sent_at=sent_at,
+    )
 
 
 def mark_low_stock_alert_error(message, *, mode="auto"):
-    result_prefix = "Błąd automatycznego alertu." if mode == "auto" else "Błąd ręcznego alertu."
-    update_low_stock_alert_state(
-        checked_at=utc_now_iso(),
-        result_message=result_prefix,
-        error_message=message,
+    mark_runtime_low_stock_alert_error(
+        DB_PATH,
+        message,
+        mode=mode,
     )
 
 
 def process_low_stock_alert(mode="manual"):
-    checked_at = utc_now_iso()
-    alert_rows = get_low_stock_rows(limit=LOW_STOCK_ALERT_ROW_LIMIT)
-    if not alert_rows:
-        update_low_stock_alert_state(
-            checked_at=checked_at,
-            result_message="Brak pozycji do alertu.",
-            signature="",
-        )
-        return {"status": "empty", "count": 0}
-
-    signature = build_low_stock_alert_signature(alert_rows)
-    previous_signature = get_setting(DB_PATH, "alerts_low_stock_last_hash") or ""
-    if mode == "auto" and previous_signature and secrets.compare_digest(previous_signature, signature):
-        update_low_stock_alert_state(
-            checked_at=checked_at,
-            result_message="Brak zmian od ostatniej wysyłki.",
-            signature=signature,
-        )
-        return {"status": "duplicate", "count": len(alert_rows)}
-
-    send_low_stock_alert_email(alert_rows)
-    result_message = (
-        f"Wysłano alert automatycznie ({format_position_count(len(alert_rows))})."
-        if mode == "auto"
-        else f"Wysłano alert ręcznie ({format_position_count(len(alert_rows))})."
+    return process_runtime_low_stock_alert(
+        DB_PATH,
+        mode=mode,
+        low_stock_row_limit=LOW_STOCK_ALERT_ROW_LIMIT,
+        get_low_stock_rows_fn=get_low_stock_rows,
+        send_low_stock_alert_email_fn=send_low_stock_alert_email,
+        record_audit_event_fn=record_audit_event,
+        format_position_count_fn=format_position_count,
     )
-    update_low_stock_alert_state(
-        checked_at=checked_at,
-        result_message=result_message,
-        signature=signature,
-        sent_count=len(alert_rows),
-        sent_at=checked_at,
-    )
-    record_audit_event(
-        "low_stock_alert_send",
-        "email",
-        entity_label="Alert niskich stanów",
-        new_value=format_position_count(len(alert_rows)),
-        details={
-            "mode": mode,
-            "count": len(alert_rows),
-            "signature": signature[:16],
-        },
-        actor_ip="system" if mode == "auto" else None,
-    )
-    return {"status": "sent", "count": len(alert_rows)}
 
 
 def run_low_stock_alert_with_lock(blocking):
@@ -639,34 +549,12 @@ def run_low_stock_alert_with_lock(blocking):
 
 
 def build_low_stock_alert_history(limit=10):
-    history = []
-    scan_limit = max(limit * 8, 40)
-    for row in get_recent_audit_log(DB_PATH, limit=scan_limit):
-        if row["action"] != "low_stock_alert_send":
-            continue
-        details = {}
-        details_json = row["details_json"]
-        if details_json:
-            try:
-                details = json.loads(details_json)
-            except (TypeError, ValueError, json.JSONDecodeError):
-                details = {}
-        mode = details.get("mode") or "manual"
-        history.append(
-            {
-                "created_at": format_pull_time(row["created_at"]),
-                "mode_label": "Auto" if mode == "auto" else "Ręcznie",
-                "count_label": (
-                    format_position_count(details["count"])
-                    if details.get("count") is not None
-                    else row["new_value"] or "-"
-                ),
-                "actor_ip": row["actor_ip"] or ("system" if mode == "auto" else "-"),
-            }
-        )
-        if len(history) >= limit:
-            break
-    return history
+    return build_runtime_low_stock_alert_history(
+        DB_PATH,
+        limit=limit,
+        format_pull_time_fn=format_pull_time,
+        format_position_count_fn=format_position_count,
+    )
 
 
 def record_audit_event(

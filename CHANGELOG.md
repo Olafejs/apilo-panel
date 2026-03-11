@@ -16,6 +16,17 @@ All important changes should be tracked here together with the application versi
 
 - Additional validation coverage for SMTP fields.
 
+## [1.0.35] - 2026-03-11
+
+### Added
+
+- Added unit tests for extracted low-stock alert helpers and history formatting.
+
+### Changed
+
+- Extracted low-stock alert state, scheduling helpers, hashing, and audit history building into `app_alerts.py`.
+- Kept `app.py` on thin wrappers for alert processing so current routes and monkeypatched tests keep the same interface.
+
 ## [1.0.34] - 2026-03-11
 
 ### Added
