@@ -16,6 +16,17 @@ All important changes should be tracked here together with the application versi
 
 - Additional validation coverage for SMTP fields.
 
+## [1.0.25] - 2026-03-11
+
+### Added
+
+- Added pytest-based coverage for login, rate limiting, sales report, manual sync, and low-stock alert flows.
+- Added a GitHub Actions workflow that compiles the app modules and runs the test suite on pushes and pull requests.
+
+### Changed
+
+- Split test-only tooling into `requirements-dev.txt` so the runtime Docker image can keep production dependencies only.
+
 ## [1.0.24] - 2026-03-11
 
 ### Added
