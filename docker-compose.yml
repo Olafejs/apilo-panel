@@ -12,6 +12,8 @@ services:
       FLASK_DEBUG: "0"
       APP_HOST: "0.0.0.0"
       APP_PORT: "5080"
+      APP_THREADS: "4"
+      APP_TIMEOUT: "120"
       APILO_DB_PATH: "/app/data/apilo.sqlite3"
     volumes:
       - ./data/db:/app/data

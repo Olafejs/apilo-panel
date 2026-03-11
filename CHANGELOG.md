@@ -16,6 +16,18 @@ All important changes should be tracked here together with the application versi
 
 - Additional validation coverage for SMTP fields.
 
+## [1.0.26] - 2026-03-11
+
+### Added
+
+- Added a public `/healthz` endpoint for container health checks.
+- Added `gunicorn.conf.py` for production runtime configuration.
+
+### Changed
+
+- Docker and systemd runtime now start the app through `gunicorn` instead of Flask's development server.
+- Container runtime now runs as a non-root user and exposes a Docker health check.
+
 ## [1.0.25] - 2026-03-11
 
 ### Added

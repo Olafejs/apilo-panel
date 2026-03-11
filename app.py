@@ -160,6 +160,8 @@ app.config.update(
 APP_PASSWORD = os.getenv("APP_PASSWORD")
 SYNC_LOCK = threading.Lock()
 SYNC_STATUS_LOCK = threading.Lock()
+BACKGROUND_REFRESH_LOCK = threading.Lock()
+BACKGROUND_REFRESH_STARTED = False
 SYNC_STATUS = {
     "running": False,
     "job": "",
@@ -2051,9 +2053,20 @@ def compute_allegro_price(item, base_value, markup_pct=0.0):
 
 
 def start_background_refresh(debug_mode):
-    if os.getenv("WERKZEUG_RUN_MAIN") == "true" or not debug_mode:
-        thread = threading.Thread(target=background_refresh_loop, daemon=True)
+    if debug_mode and os.getenv("WERKZEUG_RUN_MAIN") != "true":
+        return False
+    global BACKGROUND_REFRESH_STARTED
+    with BACKGROUND_REFRESH_LOCK:
+        if BACKGROUND_REFRESH_STARTED:
+            return False
+        thread = threading.Thread(
+            target=background_refresh_loop,
+            name="background-refresh",
+            daemon=True,
+        )
         thread.start()
+        BACKGROUND_REFRESH_STARTED = True
+    return True
 
 
 @app.after_request
@@ -2091,6 +2104,30 @@ def inject_now():
         "csrf_token": get_csrf_token,
         "app_version": APP_VERSION,
     }
+
+
+@app.get("/healthz")
+def healthz():
+    try:
+        get_setting(DB_PATH, "last_pull_at")
+        return jsonify(
+            {
+                "status": "ok",
+                "version": APP_VERSION,
+                "sync_running": get_sync_status_snapshot().get("running", False),
+            }
+        )
+    except Exception:
+        app.logger.exception("Healthcheck failed")
+        return (
+            jsonify(
+                {
+                    "status": "error",
+                    "version": APP_VERSION,
+                }
+            ),
+            503,
+        )
 
 
 def format_pull_time(value):

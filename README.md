@@ -42,6 +42,8 @@ Panel w Dockerze:
 http://127.0.0.1:5080
 ```
 
+Kontener startuje przez `gunicorn` i wystawia healthcheck pod `http://127.0.0.1:5080/healthz`.
+
 W tym repo build i runtime kontenera uzywaja sieci hosta, bo na tym serwerze zwykly Docker `bridge` nie ma stabilnego wyjscia do internetu i API Apilo.
 
 Dane runtime:
@@ -93,5 +95,7 @@ THUMB_TTL_SECONDS=86400
 REFRESH_INTERVAL_SECONDS=600
 SALES_CACHE_REFRESH_INTERVAL_SECONDS=1800
 SALES_YEAR_REFRESH_INTERVAL_SECONDS=21600
+APP_THREADS=4
+APP_TIMEOUT=120
 SESSION_COOKIE_SECURE=0
 ```
