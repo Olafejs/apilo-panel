@@ -26,6 +26,7 @@ def app_module(tmp_path, monkeypatch):
     sys.modules.pop("app", None)
     sys.modules.pop("app_admin", None)
     sys.modules.pop("app_config", None)
+    sys.modules.pop("app_reporting", None)
     sys.modules.pop("app_sync", None)
     sys.modules.pop("app_utils", None)
     sys.modules.pop("db", None)

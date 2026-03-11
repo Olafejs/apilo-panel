@@ -154,8 +154,10 @@ def test_sales_report_uses_realized_query_flag(app_module, logged_in_client, mon
     monkeypatch.setattr(app_module, "get_sales_totals", fake_get_sales_totals)
     monkeypatch.setattr(
         app_module,
-        "get_ean_name_map",
-        lambda db_path: {"5901234123457": "Produkt testowy"},
+        "build_sales_report_rows",
+        lambda db_path, totals: [
+            {"ean": "5901234123457", "name": "Produkt testowy", "quantity": 3}
+        ],
     )
 
     response = logged_in_client.get("/sales-report?days=30&realized=0")

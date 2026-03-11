@@ -16,6 +16,17 @@ All important changes should be tracked here together with the application versi
 
 - Additional validation coverage for SMTP fields.
 
+## [1.0.33] - 2026-03-11
+
+### Added
+
+- Added unit tests for sales-report normalization, order-id extraction, and sales aggregation helpers.
+
+### Changed
+
+- Extracted sales reporting helpers and aggregation logic into `app_reporting.py`.
+- Kept the Flask route in `app.py` on a thin wrapper so the report view and export keep the same behavior.
+
 ## [1.0.32] - 2026-03-11
 
 ### Added

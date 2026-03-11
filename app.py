@@ -64,6 +64,12 @@ from app_config import (
     THUMB_TTL_SECONDS,
     TRUST_X_FORWARDED_FOR,
 )
+from app_reporting import (
+    build_sales_report_csv,
+    build_sales_report_rows,
+    get_sales_totals as build_sales_totals,
+    normalize_sales_report_days,
+)
 from app_sync import (
     build_sync_status_payload as build_runtime_sync_status_payload,
     compute_next_run_at,
@@ -77,7 +83,7 @@ from app_sync import (
     schedule_sales_refresh as schedule_runtime_sales_refresh,
     should_refresh_year_sales_cache as should_refresh_runtime_year_sales_cache,
     start_background_refresh as start_runtime_background_refresh,
-    update_sync_status,
+    update_sync_status as update_runtime_sync_status,
 )
 from app_utils import (
     format_date_pl,
@@ -100,8 +106,6 @@ from db import (
     get_products_count,
     get_product_by_id,
     get_product_by_apilo_id,
-    get_ean_name_map,
-    get_product_maps,
     get_sales_cache_details_map,
     get_sales_year_map,
     get_setting,
@@ -363,6 +367,10 @@ def ensure_sync_schedule():
     )
 
 
+def update_sync_status(**changes):
+    update_runtime_sync_status(**changes)
+
+
 def schedule_inventory_sync(reference_time=None, retry=False):
     schedule_runtime_inventory_sync(
         REFRESH_INTERVAL_SECONDS,
@@ -419,24 +427,6 @@ def get_suggest_days():
 
 def get_allegro_price_list_id():
     return parse_int_value(get_setting(DB_PATH, "allegro_price_list_id"), 20, min_value=1)
-
-
-def get_realized_order_status_ids(client):
-    try:
-        status_map = client.get_order_status_map()
-    except Exception:
-        return set()
-    realized_ids = set()
-    for item in status_map:
-        haystack = " ".join(
-            str(item.get(key) or "")
-            for key in ("key", "name", "description")
-        ).lower()
-        if "zrealiz" in haystack or "complete" in haystack:
-            status_id = item.get("id")
-            if status_id is not None:
-                realized_ids.add(status_id)
-    return realized_ids
 
 
 def get_low_stock_rows(limit=10):
@@ -1529,12 +1519,7 @@ def sync_status():
 def sales_report():
     if tokens_missing():
         return redirect(url_for("settings"))
-    try:
-        days = int(request.args.get("days") or 30)
-    except ValueError:
-        days = 30
-    if days < 1 or days > 365:
-        days = 30
+    days = normalize_sales_report_days(request.args.get("days"), default=30)
     export = request.args.get("export") == "1"
     realized_only = request.args.get("realized", "1") != "0"
     now = datetime.now(timezone.utc)
@@ -1545,23 +1530,10 @@ def sales_report():
         app.logger.exception("Sales report generation failed")
         flash(public_error_message(exc), "error")
         return redirect(url_for("index"))
-    ean_name_map = get_ean_name_map(DB_PATH)
-    rows = [
-        {
-            "ean": ean,
-            "name": ean_name_map.get(ean, ""),
-            "quantity": qty,
-        }
-        for ean, qty in totals.items()
-    ]
-    rows.sort(key=lambda r: r["quantity"], reverse=True)
+    rows = build_sales_report_rows(DB_PATH, totals)
     if export:
-        output = ["EAN;Nazwa;Sprzedane"]
-        for row in rows:
-            name = (row["name"] or "").replace(";", ",")
-            output.append(f"{row['ean']};{name};{row['quantity']}")
         response = app.response_class(
-            "\n".join(output),
+            build_sales_report_csv(rows),
             mimetype="text/csv",
         )
         response.headers["Content-Disposition"] = "attachment; filename=raport_sprzedazy.csv"
@@ -1579,99 +1551,12 @@ def sales_report():
 
 
 def get_sales_totals(days, realized_only=True):
-    now = datetime.now(timezone.utc)
-    ordered_after = (now - timedelta(days=days)).isoformat()
-    client = get_client()
-    orders = client.list_orders(ordered_after=ordered_after, payment_status=2)
-    orders_total = len(orders)
-    realized_filter = False
-    if realized_only:
-        realized_status_ids = get_realized_order_status_ids(client)
-        if realized_status_ids:
-            realized_filter = True
-            orders = [
-                order
-                for order in orders
-                if parse_int_value(order.get("status"), -1) in realized_status_ids
-            ]
-    by_apilo_id, by_original_code, by_sku = get_product_maps(DB_PATH)
-    totals = {}
-    details_map = {}
-    for order in orders:
-        day_key = extract_order_day(order)
-        order_id = order.get("id")
-        external_order_id = pick_external_order_id(order)
-        for item in order.get("orderItems", []):
-            ean = item.get("ean")
-            if not ean:
-                product_id = item.get("productId")
-                if product_id is not None:
-                    ean = by_apilo_id.get(str(product_id))
-            if not ean:
-                original_code = item.get("originalCode")
-                if original_code:
-                    ean = by_original_code.get(original_code)
-            if not ean:
-                sku = item.get("sku")
-                if sku:
-                    ean = by_sku.get(sku)
-            qty = item.get("quantity") or 0
-            if not ean:
-                continue
-            totals[ean] = totals.get(ean, 0) + qty
-            if day_key and order_id:
-                details_map.setdefault(ean, {})
-                entry = details_map[ean].setdefault(
-                    order_id,
-                    {
-                        "date": day_key,
-                        "qty": 0,
-                        "order_id": order_id,
-                        "allegro_id": external_order_id,
-                    },
-                )
-                entry["qty"] += qty
-    meta = {
-        "orders_total": orders_total,
-        "orders_used": len(orders),
-        "realized_filter": realized_filter,
-    }
-    details_list = {}
-    for ean, orders_map in details_map.items():
-        items = list(orders_map.values())
-        items.sort(key=lambda x: x["date"], reverse=True)
-        details_list[ean] = items
-    return totals, meta, details_list
-
-
-def extract_order_day(order):
-    for key in ("orderedAt", "createdAt", "updatedAt"):
-        value = order.get(key)
-        if value:
-            try:
-                dt = datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone()
-                return dt.strftime("%Y-%m-%d")
-            except ValueError:
-                continue
-    return None
-
-
-def pick_external_order_id(order):
-    candidates = (
-        "externalId",
-        "externalOrderId",
-        "channelOrderId",
-        "orderId",
-        "marketplaceOrderId",
-        "id",
+    return build_sales_totals(
+        DB_PATH,
+        get_client(),
+        days,
+        realized_only=realized_only,
     )
-    for key in candidates:
-        value = order.get(key)
-        if isinstance(value, dict):
-            value = value.get("id") or value.get("value")
-        if value:
-            return str(value)
-    return ""
 
 
 def perform_sync_pull():
