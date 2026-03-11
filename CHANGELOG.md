@@ -16,6 +16,18 @@ All important changes should be tracked here together with the application versi
 
 - Additional validation coverage for SMTP fields.
 
+## [1.0.24] - 2026-03-11
+
+### Added
+
+- Added automatic low-stock alerts with configurable enable/disable state and interval in Settings.
+- Added low-stock alert send history based on audit entries.
+
+### Changed
+
+- Low-stock alerts now track the last check, last result, and last error state.
+- Automatic low-stock alerts skip duplicate sends until the shortage list changes.
+
 ## [1.0.23] - 2026-03-11
 
 ### Added

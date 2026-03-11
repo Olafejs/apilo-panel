@@ -244,15 +244,46 @@
           <div class="card-head">
             <div>
               <h2>Alert niskich stanów</h2>
-              <p class="card-desc">Podgląd bieżących braków i ręczne wysłanie maila z alertem.</p>
+              <p class="card-desc">Automatyczny i ręczny alert email dla bieżących braków.</p>
             </div>
           </div>
           <div class="details-stats">
+            <div>Auto alert: <strong>{{ "Włączony" if low_stock_alerts.enabled else "Wyłączony" }}</strong></div>
+            <div>Interwał: <strong>{{ low_stock_alerts.interval_hours or 24 }}</strong> godz.</div>
             <div>Pozycji z brakami: <strong>{{ low_stock_alerts.count or 0 }}</strong></div>
             <div>Łączny brak: <strong>{{ low_stock_alerts.units or 0 }}</strong> szt.</div>
+            <div>Ostatni check: <strong>{{ low_stock_alerts.last_check_at or "-" }}</strong></div>
+            <div>Następna próba: <strong>{{ low_stock_alerts.next_check_at or "-" }}</strong></div>
             <div>Ostatnia wysyłka: <strong>{{ low_stock_alerts.last_sent_at or "-" }}</strong></div>
-            <div>Ostatnio wysłano: <strong>{{ low_stock_alerts.last_sent_count or 0 }}</strong> pozycji</div>
+            <div>Ostatnio wysłano: <strong>{{ low_stock_alerts.last_sent_count_label or "0 pozycji" }}</strong></div>
           </div>
+          {% if low_stock_alerts.last_result %}
+            <div class="details-text">Ostatni wynik: <strong>{{ low_stock_alerts.last_result }}</strong></div>
+          {% endif %}
+          {% if low_stock_alerts.last_error %}
+            <div class="message error">
+              Ostatni błąd: {{ low_stock_alerts.last_error }}
+              {% if low_stock_alerts.last_error_at %}({{ low_stock_alerts.last_error_at }}){% endif %}
+            </div>
+          {% endif %}
+          <form method="post" class="stack inline-action-form">
+            <input type="hidden" name="action" value="alerts_settings">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-grid">
+              <label class="checkbox-row full">
+                <input type="checkbox" name="alerts_low_stock_enabled" value="1" {% if low_stock_alerts.enabled %}checked{% endif %}>
+                <span>Włącz automatyczny alert niskich stanów</span>
+              </label>
+              <label>
+                Interwał wysyłki (godziny)
+                <input type="number" min="1" max="720" step="1" name="alerts_low_stock_interval_hours" value="{{ low_stock_alerts.interval_hours or 24 }}">
+                <span class="field-help">Auto alert wysyła email tylko wtedy, gdy lista braków zmieniła się od ostatniej wysyłki.</span>
+              </label>
+            </div>
+            <div class="action-row">
+              <button class="btn" type="submit">Zapisz automatykę</button>
+            </div>
+          </form>
           {% if low_stock_alerts.rows %}
             <table class="details-table">
               <thead>
@@ -286,6 +317,36 @@
               <button class="btn primary" type="submit">Wyślij alert email</button>
             </div>
           </form>
+          <div class="card-head subsection-head">
+            <div>
+              <h2>Historia wysyłek alertu</h2>
+              <p class="card-desc">Ostatnie wysłane alerty email.</p>
+            </div>
+          </div>
+          {% if low_stock_alerts.history %}
+            <table class="details-table">
+              <thead>
+                <tr>
+                  <th>Czas</th>
+                  <th>Tryb</th>
+                  <th>Pozycji</th>
+                  <th>IP</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in low_stock_alerts.history %}
+                <tr>
+                  <td>{{ row.created_at }}</td>
+                  <td>{{ row.mode_label }}</td>
+                  <td>{{ row.count_label }}</td>
+                  <td>{{ row.actor_ip }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% else %}
+            <div class="details-empty">Brak historii wysłanych alertów.</div>
+          {% endif %}
         </div>
 
         <div class="settings-break full">

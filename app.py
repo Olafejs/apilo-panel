@@ -1,4 +1,6 @@
+import hashlib
 import ipaddress
+import json
 import logging
 import os
 import secrets
@@ -183,6 +185,7 @@ PRODUCT_PRESET_LABELS = {
     "no_sales": "Bez sprzedazy",
     "high_value": "Najwyzsza wartosc",
 }
+LOW_STOCK_ALERT_ROW_LIMIT = 200
 
 logging.basicConfig(
     level=logging.INFO,
@@ -499,6 +502,202 @@ def get_low_stock_rows(limit=10):
     return result
 
 
+def get_low_stock_alert_enabled():
+    return parse_bool_value(get_setting(DB_PATH, "alerts_low_stock_enabled"), default=False)
+
+
+def get_low_stock_alert_interval_hours():
+    return parse_int_value(
+        get_setting(DB_PATH, "alerts_low_stock_interval_hours"),
+        24,
+        min_value=1,
+        max_value=720,
+    )
+
+
+def summarize_low_stock_alert_settings_snapshot(enabled, interval_hours):
+    return f"auto={'1' if enabled else '0'} interval={interval_hours}h"
+
+
+def format_item_count(count, singular, paucal, plural):
+    count = int(count or 0)
+    mod10 = count % 10
+    mod100 = count % 100
+    if count == 1:
+        word = singular
+    elif 2 <= mod10 <= 4 and not 12 <= mod100 <= 14:
+        word = paucal
+    else:
+        word = plural
+    return f"{count} {word}"
+
+
+def format_position_count(count):
+    return format_item_count(count, "pozycja", "pozycje", "pozycji")
+
+
+def get_low_stock_alert_next_check_iso():
+    if not get_low_stock_alert_enabled():
+        return ""
+    return compute_next_run_at(
+        get_setting(DB_PATH, "alerts_low_stock_last_check_at"),
+        get_low_stock_alert_interval_hours() * 3600,
+    )
+
+
+def is_low_stock_alert_due(now=None):
+    if not get_low_stock_alert_enabled():
+        return False
+    scheduled_at = parse_datetime_value(get_low_stock_alert_next_check_iso())
+    if not scheduled_at:
+        return True
+    now = now or datetime.now(timezone.utc)
+    return scheduled_at <= now
+
+
+def build_low_stock_alert_signature(rows):
+    normalized_rows = []
+    for row in rows:
+        normalized_rows.append(
+            {
+                "ean": row.get("ean") or "",
+                "name": row.get("name") or "",
+                "quantity": int(row.get("quantity") or 0),
+                "suggested_qty": int(row.get("suggested_qty") or 0),
+                "shortage_qty": int(row.get("shortage_qty") or 0),
+            }
+        )
+    normalized_rows.sort(key=lambda item: (item["ean"], item["name"]))
+    payload = json.dumps(normalized_rows, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def update_low_stock_alert_state(
+    *,
+    checked_at=None,
+    result_message=None,
+    error_message=None,
+    signature=None,
+    sent_count=None,
+    sent_at=None,
+):
+    checked_at = checked_at or utc_now_iso()
+    set_setting(DB_PATH, "alerts_low_stock_last_check_at", checked_at)
+    if result_message is not None:
+        set_setting(DB_PATH, "alerts_low_stock_last_result", result_message)
+    if error_message:
+        set_setting(DB_PATH, "alerts_low_stock_last_error", error_message)
+        set_setting(DB_PATH, "alerts_low_stock_last_error_at", checked_at)
+    else:
+        set_setting(DB_PATH, "alerts_low_stock_last_error", "")
+        set_setting(DB_PATH, "alerts_low_stock_last_error_at", "")
+    if signature is not None:
+        set_setting(DB_PATH, "alerts_low_stock_last_hash", signature)
+    if sent_at is not None:
+        set_setting(DB_PATH, "alerts_low_stock_sent_at", sent_at)
+    if sent_count is not None:
+        set_setting(DB_PATH, "alerts_low_stock_sent_count", str(sent_count))
+
+
+def mark_low_stock_alert_error(message, *, mode="auto"):
+    result_prefix = "Błąd automatycznego alertu." if mode == "auto" else "Błąd ręcznego alertu."
+    update_low_stock_alert_state(
+        checked_at=utc_now_iso(),
+        result_message=result_prefix,
+        error_message=message,
+    )
+
+
+def process_low_stock_alert(mode="manual"):
+    checked_at = utc_now_iso()
+    alert_rows = get_low_stock_rows(limit=LOW_STOCK_ALERT_ROW_LIMIT)
+    if not alert_rows:
+        update_low_stock_alert_state(
+            checked_at=checked_at,
+            result_message="Brak pozycji do alertu.",
+            signature="",
+        )
+        return {"status": "empty", "count": 0}
+
+    signature = build_low_stock_alert_signature(alert_rows)
+    previous_signature = get_setting(DB_PATH, "alerts_low_stock_last_hash") or ""
+    if mode == "auto" and previous_signature and secrets.compare_digest(previous_signature, signature):
+        update_low_stock_alert_state(
+            checked_at=checked_at,
+            result_message="Brak zmian od ostatniej wysyłki.",
+            signature=signature,
+        )
+        return {"status": "duplicate", "count": len(alert_rows)}
+
+    send_low_stock_alert_email(alert_rows)
+    result_message = (
+        f"Wysłano alert automatycznie ({format_position_count(len(alert_rows))})."
+        if mode == "auto"
+        else f"Wysłano alert ręcznie ({format_position_count(len(alert_rows))})."
+    )
+    update_low_stock_alert_state(
+        checked_at=checked_at,
+        result_message=result_message,
+        signature=signature,
+        sent_count=len(alert_rows),
+        sent_at=checked_at,
+    )
+    record_audit_event(
+        "low_stock_alert_send",
+        "email",
+        entity_label="Alert niskich stanów",
+        new_value=format_position_count(len(alert_rows)),
+        details={
+            "mode": mode,
+            "count": len(alert_rows),
+            "signature": signature[:16],
+        },
+        actor_ip="system" if mode == "auto" else None,
+    )
+    return {"status": "sent", "count": len(alert_rows)}
+
+
+def run_low_stock_alert_with_lock(blocking):
+    acquired = SYNC_LOCK.acquire(blocking=blocking)
+    if not acquired:
+        return None
+    try:
+        return process_low_stock_alert(mode="auto")
+    finally:
+        SYNC_LOCK.release()
+
+
+def build_low_stock_alert_history(limit=10):
+    history = []
+    scan_limit = max(limit * 8, 40)
+    for row in get_recent_audit_log(DB_PATH, limit=scan_limit):
+        if row["action"] != "low_stock_alert_send":
+            continue
+        details = {}
+        details_json = row["details_json"]
+        if details_json:
+            try:
+                details = json.loads(details_json)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                details = {}
+        mode = details.get("mode") or "manual"
+        history.append(
+            {
+                "created_at": format_pull_time(row["created_at"]),
+                "mode_label": "Auto" if mode == "auto" else "Ręcznie",
+                "count_label": (
+                    format_position_count(details["count"])
+                    if details.get("count") is not None
+                    else row["new_value"] or "-"
+                ),
+                "actor_ip": row["actor_ip"] or ("system" if mode == "auto" else "-"),
+            }
+        )
+        if len(history) >= limit:
+            break
+    return history
+
+
 AUDIT_ACTION_LABELS = {
     "login_success": "Logowanie",
     "password_setup": "Pierwsze hasło",
@@ -511,6 +710,7 @@ AUDIT_ACTION_LABELS = {
     "suggestions_settings_update": "Ustawienia sugestii",
     "suggestions_refresh": "Przeliczenie sugestii",
     "inventory_value_refresh": "Przeliczenie wartości",
+    "low_stock_alert_settings_update": "Auto alert stanów",
     "low_stock_alert_send": "Alert niskich stanów",
     "product_quantity_update": "Zmiana stanu",
     "manual_sync_pull": "Pobranie z Apilo",
@@ -1210,25 +1410,54 @@ def settings():
             except Exception as exc:
                 app.logger.exception("Email test failed")
                 flash(public_error_message(exc), "error")
+        elif action == "alerts_settings":
+            current_enabled = get_low_stock_alert_enabled()
+            current_interval = get_low_stock_alert_interval_hours()
+            enabled = request.form.get("alerts_low_stock_enabled") == "1"
+            interval_hours = parse_int_value(
+                request.form.get("alerts_low_stock_interval_hours"),
+                24,
+                min_value=1,
+                max_value=720,
+            )
+            set_setting(DB_PATH, "alerts_low_stock_enabled", "1" if enabled else "0")
+            set_setting(DB_PATH, "alerts_low_stock_interval_hours", str(interval_hours))
+            if enabled and not current_enabled:
+                set_setting(DB_PATH, "alerts_low_stock_last_check_at", "")
+                set_setting(DB_PATH, "alerts_low_stock_last_result", "Auto alert włączony.")
+            elif not enabled:
+                set_setting(DB_PATH, "alerts_low_stock_last_result", "Auto alert wyłączony.")
+                set_setting(DB_PATH, "alerts_low_stock_last_error", "")
+                set_setting(DB_PATH, "alerts_low_stock_last_error_at", "")
+            record_audit_event(
+                "low_stock_alert_settings_update",
+                "settings",
+                entity_label="Auto alert niskich stanów",
+                old_value=summarize_low_stock_alert_settings_snapshot(
+                    current_enabled,
+                    current_interval,
+                ),
+                new_value=summarize_low_stock_alert_settings_snapshot(
+                    enabled,
+                    interval_hours,
+                ),
+            )
+            flash("Ustawienia auto alertu zapisane.", "success")
         elif action == "alerts_email":
             try:
-                alert_rows = get_low_stock_rows(limit=200)
-                if not alert_rows:
+                result = process_low_stock_alert(mode="manual")
+                if result["status"] == "empty":
                     flash("Brak pozycji do alertu niskich stanów.", "info")
                 else:
-                    send_low_stock_alert_email(alert_rows)
-                    set_setting(DB_PATH, "alerts_low_stock_sent_at", utc_now_iso())
-                    set_setting(DB_PATH, "alerts_low_stock_sent_count", str(len(alert_rows)))
-                    record_audit_event(
-                        "low_stock_alert_send",
-                        "email",
-                        entity_label="Alert niskich stanów",
-                        new_value=f"{len(alert_rows)} pozycji",
+                    flash(
+                        f"Wysłano alert niskich stanów ({format_position_count(result['count'])}).",
+                        "success",
                     )
-                    flash(f"Wysłano alert niskich stanów ({len(alert_rows)} pozycji).", "success")
             except Exception as exc:
                 app.logger.exception("Low stock alert email failed")
-                flash(public_error_message(exc), "error")
+                message = public_error_message(exc)
+                mark_low_stock_alert_error(message, mode="manual")
+                flash(message, "error")
         elif action == "password":
             password = request.form.get("password")
             confirm = request.form.get("confirm")
@@ -1362,14 +1591,26 @@ def settings():
         safety_pct=get_suggest_safety_pct(),
         suggest_days=get_suggest_days(),
     )
+    last_sent_count = parse_int_value(get_setting(DB_PATH, "alerts_low_stock_sent_count"), 0, min_value=0)
     low_stock_alerts = {
         "rows": get_low_stock_rows(limit=10),
         "count": low_stock_dashboard.get("shortage_count", 0) or 0,
         "units": low_stock_dashboard.get("shortage_units", 0) or 0,
+        "enabled": get_low_stock_alert_enabled(),
+        "interval_hours": get_low_stock_alert_interval_hours(),
         "last_sent_at": format_pull_time(get_setting(DB_PATH, "alerts_low_stock_sent_at") or ""),
-        "last_sent_count": parse_int_value(
-            get_setting(DB_PATH, "alerts_low_stock_sent_count"), 0, min_value=0
+        "last_sent_count": last_sent_count,
+        "last_sent_count_label": format_position_count(last_sent_count),
+        "last_check_at": format_pull_time(
+            get_setting(DB_PATH, "alerts_low_stock_last_check_at") or ""
         ),
+        "next_check_at": format_pull_time(get_low_stock_alert_next_check_iso()),
+        "last_result": get_setting(DB_PATH, "alerts_low_stock_last_result") or "",
+        "last_error": get_setting(DB_PATH, "alerts_low_stock_last_error") or "",
+        "last_error_at": format_pull_time(
+            get_setting(DB_PATH, "alerts_low_stock_last_error_at") or ""
+        ),
+        "history": build_low_stock_alert_history(limit=10),
     }
     return render_template(
         "settings.html",
@@ -1743,6 +1984,28 @@ def background_refresh_loop():
                     app.logger.info("Background sales cache refresh skipped, sync already in progress.")
         except Exception:
             app.logger.exception("Background sales cache refresh failed")
+        now = datetime.now(timezone.utc)
+        try:
+            if is_low_stock_alert_due(now):
+                alert_result = run_low_stock_alert_with_lock(blocking=False)
+                if alert_result is None:
+                    pass
+                elif alert_result["status"] == "sent":
+                    ran_job = True
+                    app.logger.info(
+                        "Background low-stock alert sent for %s products.",
+                        alert_result["count"],
+                    )
+                elif alert_result["status"] == "duplicate":
+                    ran_job = True
+                    app.logger.info("Background low-stock alert skipped, no changes detected.")
+                else:
+                    ran_job = True
+                    app.logger.info("Background low-stock alert skipped, no shortages found.")
+        except Exception as exc:
+            message = public_error_message(exc)
+            mark_low_stock_alert_error(message, mode="auto")
+            app.logger.exception("Background low-stock alert failed")
         time.sleep(5 if not ran_job else 1)
 
 

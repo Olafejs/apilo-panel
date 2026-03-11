@@ -713,6 +713,10 @@ tbody tr.dirty {
   flex-wrap: wrap;
 }
 
+.subsection-head {
+  margin-top: 16px;
+}
+
 .card-head > div {
   display: flex;
   flex-direction: column;
