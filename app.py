@@ -1,6 +1,5 @@
 import csv
 import hashlib
-import ipaddress
 import io
 import json
 import logging
@@ -9,7 +8,6 @@ import secrets
 import threading
 import time
 from datetime import datetime, timedelta, timezone
-from functools import wraps
 from urllib.parse import urlparse
 
 import requests
@@ -28,6 +26,14 @@ from flask import (
 )
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from app_auth import (
+    get_csrf_token,
+    is_safe_redirect_target,
+    login_required,
+    public_error_message,
+    render_setup_password as render_auth_setup_password,
+    validate_csrf,
+)
 from apilo import ApiloClient
 from app_admin import (
     build_recent_audit_entries,
@@ -39,6 +45,15 @@ from app_admin import (
     summarize_inventory_values_snapshot,
     summarize_suggestions_settings_snapshot,
     write_audit_event,
+)
+from app_auth import (
+    get_client_ip as resolve_client_ip,
+    is_local_setup_request as is_local_setup_request_for_ip,
+    is_login_rate_limited as check_login_rate_limited,
+    login_window_start_iso as build_login_window_start_iso,
+    password_missing as auth_password_missing,
+    setup_token_required as auth_setup_token_required,
+    tokens_missing as auth_tokens_missing,
 )
 from app_config import (
     APP_HOST,
@@ -97,11 +112,9 @@ from app_utils import (
 )
 from db import (
     clear_login_attempts,
-    count_recent_login_attempts,
     get_dashboard_metrics,
     get_recent_audit_log,
     get_secret_storage_status,
-    get_tokens,
     get_products,
     get_products_count,
     get_product_by_id,
@@ -113,7 +126,6 @@ from db import (
     set_setting,
     save_sales_cache,
     save_sales_year_cache,
-    prune_login_attempts,
     record_login_attempt,
     get_base_price_map,
     get_inventory_value_totals,
@@ -684,74 +696,29 @@ def record_audit_event(
     )
 
 
-def is_safe_redirect_target(target):
-    if not target:
-        return False
-    parsed = urlparse(target)
-    if parsed.scheme or parsed.netloc:
-        return False
-    return target.startswith("/") and not target.startswith("//")
-
-
-def public_error_message(exc, default="Wystąpił błąd."):
-    if isinstance(exc, requests.exceptions.Timeout):
-        return "Timeout połączenia z API Apilo."
-    if isinstance(exc, requests.exceptions.RequestException):
-        return "Błąd połączenia z API Apilo."
-
-    message = str(exc).strip()
-    if not message:
-        return default
-    if message.startswith("Apilo API error:") or message.startswith("Token request failed:"):
-        return "Błąd komunikacji z API Apilo."
-    if isinstance(exc, RuntimeError):
-        return message.splitlines()[0][:200]
-    return default
-
-
 def get_client_ip():
-    forwarded = request.headers.get("X-Forwarded-For", "")
-    if TRUST_X_FORWARDED_FOR and forwarded:
-        client_ip = forwarded.split(",")[0].strip()
-        if client_ip:
-            return client_ip
-    return request.remote_addr or "unknown"
+    return resolve_client_ip(TRUST_X_FORWARDED_FOR)
 
 
 def is_local_setup_request():
-    client_ip = get_client_ip()
-    if client_ip in {"127.0.0.1", "::1", "::ffff:127.0.0.1"}:
-        return True
-    try:
-        parsed_ip = ipaddress.ip_address(client_ip)
-    except ValueError:
-        return False
-    if isinstance(parsed_ip, ipaddress.IPv4Address):
-        private_gateway_ranges = (
-            ipaddress.ip_network("172.16.0.0/12"),
-            ipaddress.ip_network("192.168.0.0/16"),
-        )
-        return any(parsed_ip in network for network in private_gateway_ranges) and client_ip.endswith(
-            ".1"
-        )
-    return False
+    return is_local_setup_request_for_ip(get_client_ip())
 
 
 def login_window_start_iso():
-    return (datetime.now(timezone.utc) - timedelta(seconds=LOGIN_RATE_LIMIT_WINDOW_SECONDS)).isoformat()
+    return build_login_window_start_iso(LOGIN_RATE_LIMIT_WINDOW_SECONDS)
 
 
 def is_login_rate_limited(client_ip):
-    if not client_ip or client_ip == "unknown":
-        return False
-    window_start = login_window_start_iso()
-    prune_login_attempts(DB_PATH, window_start)
-    attempts = count_recent_login_attempts(DB_PATH, client_ip, window_start)
-    return attempts >= LOGIN_RATE_LIMIT_MAX_ATTEMPTS
+    return check_login_rate_limited(
+        DB_PATH,
+        client_ip,
+        LOGIN_RATE_LIMIT_WINDOW_SECONDS,
+        LOGIN_RATE_LIMIT_MAX_ATTEMPTS,
+    )
 
 
 def setup_token_required():
-    return bool(APP_SETUP_TOKEN) and not is_local_setup_request()
+    return auth_setup_token_required(APP_SETUP_TOKEN, is_local_setup_request())
 
 
 def run_sync_pull_with_lock(blocking):
@@ -790,30 +757,6 @@ def run_suggestions_refresh_with_lock(blocking, force_year=False):
         SYNC_LOCK.release()
 
 
-def login_required(view):
-    @wraps(view)
-    def wrapped(*args, **kwargs):
-        if not session.get("logged_in"):
-            return redirect(url_for("login", next=request.path))
-        return view(*args, **kwargs)
-
-    return wrapped
-
-
-def get_csrf_token():
-    token = session.get("csrf_token")
-    if not token:
-        token = secrets.token_urlsafe(32)
-        session["csrf_token"] = token
-    return token
-
-
-def validate_csrf():
-    token = session.get("csrf_token")
-    provided = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token")
-    return token and provided and token == provided
-
-
 @app.before_request
 def require_csrf():
     if request.method == "POST":
@@ -822,24 +765,18 @@ def require_csrf():
 
 
 def tokens_missing():
-    tokens = get_tokens(DB_PATH) or {}
-    return not (tokens.get("access_token") or tokens.get("refresh_token"))
+    return auth_tokens_missing(DB_PATH)
 
 
 def password_missing():
-    if APP_PASSWORD:
-        return False
-    return get_setting(DB_PATH, "password_hash") is None
+    return auth_password_missing(DB_PATH, APP_PASSWORD)
 
 
 def render_setup_password(status_code=200):
-    return (
-        render_template(
-            "setup_password.html",
-            require_setup_token=setup_token_required(),
-            remote_setup_blocked=(not APP_SETUP_TOKEN and not is_local_setup_request()),
-        ),
-        status_code,
+    return render_auth_setup_password(
+        require_setup_token=setup_token_required(),
+        remote_setup_blocked=(not APP_SETUP_TOKEN and not is_local_setup_request()),
+        status_code=status_code,
     )
 
 

@@ -16,6 +16,17 @@ All important changes should be tracked here together with the application versi
 
 - Additional validation coverage for SMTP fields.
 
+## [1.0.34] - 2026-03-11
+
+### Added
+
+- Added unit tests for auth helper behavior around redirect safety, public API errors, trusted client IP handling, and CSRF validation.
+
+### Changed
+
+- Extracted auth and security helpers into `app_auth.py`.
+- Kept `app.py` on thin wrappers for config-bound auth checks so existing routes and tests preserve the same interface.
+
 ## [1.0.33] - 2026-03-11
 
 ### Added
