@@ -16,6 +16,17 @@ All important changes should be tracked here together with the application versi
 
 - Additional validation coverage for SMTP fields.
 
+## [1.0.30] - 2026-03-11
+
+### Added
+
+- Added unit tests for extracted parsing and formatting helpers.
+
+### Changed
+
+- Extracted environment loading, path setup, runtime constants, and version discovery into `app_config.py`.
+- Extracted shared parsing and formatting helpers into `app_utils.py` and reloaded those modules explicitly in the test harness.
+
 ## [1.0.29] - 2026-03-11
 
 ### Added

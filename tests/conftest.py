@@ -24,6 +24,8 @@ def app_module(tmp_path, monkeypatch):
     monkeypatch.delenv("TRUST_X_FORWARDED_FOR", raising=False)
 
     sys.modules.pop("app", None)
+    sys.modules.pop("app_config", None)
+    sys.modules.pop("app_utils", None)
     sys.modules.pop("db", None)
     app_module = importlib.import_module("app")
     app_module.app.config.update(TESTING=True)

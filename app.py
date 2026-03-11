@@ -13,7 +13,6 @@ from functools import wraps
 from urllib.parse import urlparse
 
 import requests
-from dotenv import load_dotenv
 from flask import (
     Flask,
     abort,
@@ -30,6 +29,40 @@ from flask import (
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from apilo import ApiloClient
+from app_config import (
+    APP_HOST,
+    APP_PASSWORD,
+    APP_PORT,
+    APP_SETUP_TOKEN,
+    APP_VERSION,
+    DB_PATH,
+    DEBUG_MODE,
+    FLASK_SECRET_KEY,
+    FLASK_SECRET_KEY_SOURCE,
+    LOGIN_RATE_LIMIT_MAX_ATTEMPTS,
+    LOGIN_RATE_LIMIT_WINDOW_SECONDS,
+    LOG_DIR,
+    REFRESH_INTERVAL_SECONDS,
+    SALES_CACHE_REFRESH_INTERVAL_SECONDS,
+    SALES_YEAR_REFRESH_INTERVAL_SECONDS,
+    SESSION_COOKIE_SECURE,
+    SESSION_LIFETIME_MINUTES,
+    THUMB_DIR,
+    THUMB_DOWNLOAD_TIMEOUT_SECONDS,
+    THUMB_MAX_DOWNLOAD_BYTES,
+    THUMB_TTL_SECONDS,
+    TRUST_X_FORWARDED_FOR,
+)
+from app_utils import (
+    format_date_pl,
+    format_pln,
+    format_pull_time,
+    parse_bool_value,
+    parse_datetime_value,
+    parse_float_value,
+    parse_int_value,
+    utc_now_iso,
+)
 from db import (
     clear_login_attempts,
     count_recent_login_attempts,
@@ -45,7 +78,6 @@ from db import (
     get_product_maps,
     get_sales_cache_details_map,
     get_sales_year_map,
-    init_db,
     get_setting,
     migrate_secret_storage,
     record_audit_log,
@@ -64,95 +96,8 @@ from db import (
     upsert_product_from_apilo,
 )
 
-BASE_DIR = os.path.dirname(__file__)
-load_dotenv(os.path.join(BASE_DIR, ".env"))
-
-DB_PATH = os.getenv("APILO_DB_PATH", "apilo.sqlite3")
-if not os.path.isabs(DB_PATH):
-    DB_PATH = os.path.join(BASE_DIR, DB_PATH)
-init_db(DB_PATH)
-THUMB_DIR = os.path.join(os.path.dirname(__file__), "static", "thumbs")
-os.makedirs(THUMB_DIR, exist_ok=True)
-LOG_DIR = os.path.join(BASE_DIR, "logs")
-os.makedirs(LOG_DIR, exist_ok=True)
-
-
-def parse_int_value(value, default, min_value=None, max_value=None):
-    try:
-        parsed = int(value)
-    except (TypeError, ValueError):
-        return default
-    if min_value is not None and parsed < min_value:
-        return default
-    if max_value is not None and parsed > max_value:
-        return default
-    return parsed
-
-
-def parse_float_value(value, default, min_value=None, max_value=None):
-    try:
-        parsed = float(value)
-    except (TypeError, ValueError):
-        return default
-    if min_value is not None and parsed < min_value:
-        return default
-    if max_value is not None and parsed > max_value:
-        return default
-    return parsed
-
-
-def parse_bool_value(value, default=False):
-    if value is None:
-        return default
-    return str(value).strip().lower() in ("1", "true", "yes", "on")
-
-
-THUMB_TTL_SECONDS = parse_int_value(os.getenv("THUMB_TTL_SECONDS"), 86400, min_value=0)
-THUMB_DOWNLOAD_TIMEOUT_SECONDS = parse_int_value(
-    os.getenv("THUMB_DOWNLOAD_TIMEOUT_SECONDS"), 10, min_value=1, max_value=60
-)
-THUMB_MAX_DOWNLOAD_BYTES = parse_int_value(
-    os.getenv("THUMB_MAX_DOWNLOAD_BYTES"), 2_000_000, min_value=65_536, max_value=20_000_000
-)
-REFRESH_INTERVAL_SECONDS = parse_int_value(
-    os.getenv("REFRESH_INTERVAL_SECONDS"), 600, min_value=10
-)
-SALES_CACHE_REFRESH_INTERVAL_SECONDS = parse_int_value(
-    os.getenv("SALES_CACHE_REFRESH_INTERVAL_SECONDS"), 1800, min_value=60
-)
-SALES_YEAR_REFRESH_INTERVAL_SECONDS = parse_int_value(
-    os.getenv("SALES_YEAR_REFRESH_INTERVAL_SECONDS"), 21600, min_value=300
-)
-SESSION_LIFETIME_MINUTES = parse_int_value(
-    os.getenv("SESSION_LIFETIME_MINUTES"), 480, min_value=5, max_value=43200
-)
-LOGIN_RATE_LIMIT_WINDOW_SECONDS = parse_int_value(
-    os.getenv("LOGIN_RATE_LIMIT_WINDOW_SECONDS"), 600, min_value=60, max_value=86400
-)
-LOGIN_RATE_LIMIT_MAX_ATTEMPTS = parse_int_value(
-    os.getenv("LOGIN_RATE_LIMIT_MAX_ATTEMPTS"), 5, min_value=1, max_value=100
-)
-SESSION_COOKIE_SECURE = parse_bool_value(os.getenv("SESSION_COOKIE_SECURE"), default=False)
-APP_SETUP_TOKEN = (os.getenv("APP_SETUP_TOKEN") or "").strip()
-TRUST_X_FORWARDED_FOR = parse_bool_value(
-    os.getenv("TRUST_X_FORWARDED_FOR"), default=False
-)
-
-
-def resolve_flask_secret_key():
-    env_key = os.getenv("FLASK_SECRET_KEY")
-    if env_key:
-        return env_key, "env"
-    stored_key = get_setting(DB_PATH, "flask_secret_key")
-    if stored_key:
-        return stored_key, "db"
-    generated_key = secrets.token_urlsafe(64)
-    set_setting(DB_PATH, "flask_secret_key", generated_key)
-    return generated_key, "generated"
-
 
 app = Flask(__name__)
-FLASK_SECRET_KEY, FLASK_SECRET_KEY_SOURCE = resolve_flask_secret_key()
 app.secret_key = FLASK_SECRET_KEY
 app.config.update(
     PERMANENT_SESSION_LIFETIME=timedelta(minutes=SESSION_LIFETIME_MINUTES),
@@ -161,7 +106,6 @@ app.config.update(
     SESSION_COOKIE_SECURE=SESSION_COOKIE_SECURE,
     SESSION_COOKIE_NAME="apilo_session",
 )
-APP_PASSWORD = os.getenv("APP_PASSWORD")
 SYNC_LOCK = threading.Lock()
 SYNC_STATUS_LOCK = threading.Lock()
 BACKGROUND_REFRESH_LOCK = threading.Lock()
@@ -237,18 +181,6 @@ if SECRET_MIGRATION_RESULT["settings"] or SECRET_MIGRATION_RESULT["tokens"]:
     )
 
 
-def read_version():
-    path = os.path.join(BASE_DIR, "VERSION")
-    try:
-        with open(path, "r", encoding="utf-8") as handle:
-            return handle.read().strip()
-    except FileNotFoundError:
-        return "0.0.0"
-
-
-APP_VERSION = read_version()
-
-
 def get_config_value(env_key, setting_key, default=None):
     env_value = os.getenv(env_key)
     if env_value:
@@ -308,24 +240,6 @@ def get_client():
         grant_type=os.getenv("APILO_GRANT_TYPE"),
         auth_token=os.getenv("APILO_AUTH_TOKEN"),
     )
-
-
-def utc_now_iso():
-    return datetime.now(timezone.utc).isoformat()
-
-
-def parse_datetime_value(value):
-    if not value:
-        return None
-    if isinstance(value, datetime):
-        return value.astimezone(timezone.utc)
-    try:
-        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
 
 
 def get_sync_job_label(job):
@@ -2240,43 +2154,8 @@ def healthz():
             503,
         )
 
-
-def format_pull_time(value):
-    if not value:
-        return ""
-    try:
-        dt = datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone()
-    except ValueError:
-        return value
-    return dt.strftime("%d.%m.%Y %H:%M")
-
-
-@app.template_filter("date_pl")
-def format_date_pl(value):
-    if not value:
-        return ""
-    if isinstance(value, datetime):
-        return value.astimezone().strftime("%d.%m.%Y")
-    try:
-        if "T" not in value and " " not in value:
-            dt = datetime.fromisoformat(value + "T00:00:00")
-        else:
-            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        return dt.astimezone().strftime("%d.%m.%Y")
-    except ValueError:
-        return value
-
-
-@app.template_filter("pln")
-def format_pln(value):
-    if value is None or value == "":
-        return "-"
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return str(value)
-    formatted = f"{number:,.2f}".replace(",", " ").replace(".", ",")
-    return f"{formatted} zł"
+app.template_filter("date_pl")(format_date_pl)
+app.template_filter("pln")(format_pln)
 
 
 def send_email_message(subject, body):
@@ -2397,8 +2276,5 @@ def thumb(apilo_id):
 
 
 if __name__ == "__main__":
-    debug_mode = os.getenv("FLASK_DEBUG") == "1"
-    app_host = os.getenv("APP_HOST", "127.0.0.1")
-    app_port = parse_int_value(os.getenv("APP_PORT"), 5000, min_value=1, max_value=65535)
-    start_background_refresh(debug_mode)
-    app.run(host=app_host, port=app_port, debug=debug_mode, use_reloader=debug_mode)
+    start_background_refresh(DEBUG_MODE)
+    app.run(host=APP_HOST, port=APP_PORT, debug=DEBUG_MODE, use_reloader=DEBUG_MODE)
