@@ -81,6 +81,8 @@ https://twoje-konto.apilo.com/admin/rest-api/
 
 Jesli konfigurujesz API z panelu, zostaw pola `APILO_*` puste w `.env`.
 
+Na liscie produktow mozesz pobrac `Eksport CSV` z aktualnym filtrem i sortowaniem.
+
 ## Najwazniejsze zmienne `.env`
 
 ```ini

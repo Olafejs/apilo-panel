@@ -10,6 +10,7 @@ from db import (
     record_login_attempt,
     save_tokens,
     set_setting,
+    upsert_product_from_apilo,
 )
 
 
@@ -218,3 +219,50 @@ def test_tokens_are_encrypted_and_legacy_plaintext_can_be_migrated(app_module):
     assert migrated_tokens[1].startswith("enc:v1:")
     assert tokens["access_token"] == "legacy-access"
     assert tokens["refresh_token"] == "legacy-refresh"
+
+
+def test_index_csv_export_uses_current_filters(app_module, logged_in_client, monkeypatch):
+    monkeypatch.setattr(app_module, "tokens_missing", lambda: False)
+    upsert_product_from_apilo(
+        app_module.DB_PATH,
+        {
+            "id": 101,
+            "originalCode": "KOD-1",
+            "sku": "SKU-ALFA",
+            "ean": "5901111111111",
+            "name": "Produkt Alfa",
+            "priceWithTax": 12.5,
+            "priceWithoutTax": 10.16,
+            "quantity": 7,
+            "status": 1,
+        },
+    )
+    upsert_product_from_apilo(
+        app_module.DB_PATH,
+        {
+            "id": 102,
+            "originalCode": "KOD-2",
+            "sku": "SKU-BETA",
+            "ean": "5902222222222",
+            "name": "Produkt Beta",
+            "priceWithTax": 22.5,
+            "priceWithoutTax": 18.29,
+            "quantity": 3,
+            "status": 1,
+        },
+    )
+
+    response = logged_in_client.get(
+        "/?search=Alfa&sort=name&order=asc&export=1"
+    )
+    body = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert response.mimetype == "text/csv"
+    assert "attachment; filename=produkty_all_" in response.headers["Content-Disposition"]
+    assert "Produkt Alfa" in body
+    assert "Produkt Beta" not in body
+    assert "Apilo ID;SKU;Kod oryginalny;Nazwa;EAN;Stan;" in body
+
+    audit_rows = get_recent_audit_log(app_module.DB_PATH, limit=5)
+    assert audit_rows[0]["action"] == "products_export_csv"

@@ -1,5 +1,7 @@
+import csv
 import hashlib
 import ipaddress
+import io
 import json
 import logging
 import os
@@ -735,6 +737,7 @@ AUDIT_ACTION_LABELS = {
     "suggestions_settings_update": "Ustawienia sugestii",
     "suggestions_refresh": "Przeliczenie sugestii",
     "inventory_value_refresh": "Przeliczenie wartości",
+    "products_export_csv": "Eksport CSV",
     "low_stock_alert_settings_update": "Auto alert stanów",
     "low_stock_alert_send": "Alert niskich stanów",
     "product_quantity_update": "Zmiana stanu",
@@ -1135,6 +1138,7 @@ def logout():
 def index():
     if tokens_missing():
         return redirect(url_for("settings"))
+    export = request.args.get("export") == "1"
     search = request.args.get("search")
     preset = normalize_product_preset(request.args.get("preset") or "all")
     default_sort, default_order = default_sort_for_preset(preset)
@@ -1156,6 +1160,87 @@ def index():
     lead_time_days = get_suggest_lead_time_days()
     safety_pct = get_suggest_safety_pct()
     suggest_days = get_suggest_days()
+    if export:
+        export_rows = get_products(
+            DB_PATH,
+            search=search,
+            preset=preset,
+            sort=sort,
+            order=order,
+            limit=None,
+            offset=0,
+            lead_time_days=lead_time_days,
+            safety_pct=safety_pct,
+            suggest_days=suggest_days,
+        )
+        record_audit_event(
+            "products_export_csv",
+            "settings",
+            entity_label="Eksport produktów CSV",
+            new_value=format_position_count(len(export_rows)),
+            details={
+                "search": search or "",
+                "preset": preset,
+                "sort": sort,
+                "order": order,
+            },
+        )
+        output = io.StringIO()
+        writer = csv.writer(output, delimiter=";")
+        writer.writerow(
+            [
+                "Apilo ID",
+                "SKU",
+                "Kod oryginalny",
+                "Nazwa",
+                "EAN",
+                "Stan",
+                "Sug. stan",
+                "Brak",
+                "Sprzedaz 30d",
+                "Sprzedaz 365d",
+                "Zamowienia 365d",
+                "Cena sklepowa brutto",
+                "Cena Allegro brutto",
+                "Wartosc stanu",
+                "Allegro ID",
+                "URL zdjecia",
+                "Aktualizacja",
+            ]
+        )
+        for product in export_rows:
+            writer.writerow(
+                [
+                    product["apilo_id"] or "",
+                    product["sku"] or "",
+                    product["original_code"] or "",
+                    product["name"] or "",
+                    product["ean"] or "",
+                    product["quantity"] if product["quantity"] is not None else "",
+                    product["suggested_qty"] if product["suggested_qty"] is not None else "",
+                    product["shortage_qty"] if product["shortage_qty"] is not None else "",
+                    product["quantity_30d"] if product["quantity_30d"] is not None else "",
+                    product["quantity_year"] if product["quantity_year"] is not None else "",
+                    product["orders_year"] if product["orders_year"] is not None else "",
+                    product["price_with_tax"] if product["price_with_tax"] is not None else "",
+                    (
+                        product["allegro_price_with_tax"]
+                        if product["allegro_price_with_tax"] is not None
+                        else ""
+                    ),
+                    product["stock_value"] if product["stock_value"] is not None else "",
+                    product["allegro_auction_id"] or "",
+                    product["image_url"] or "",
+                    format_pull_time(product["updated_at"] or ""),
+                ]
+            )
+        filename = f"produkty_{preset}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        response = app.response_class(
+            output.getvalue(),
+            mimetype="text/csv",
+        )
+        response.headers["Content-Disposition"] = f"attachment; filename={filename}"
+        return response
     products = get_products(
         DB_PATH,
         search=search,

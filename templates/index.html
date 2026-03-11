@@ -105,7 +105,13 @@
         <button class="btn" type="submit">Szukaj</button>
         <a class="btn outline" href="{{ url_for('index', preset=preset, sort=sort, order=order, limit=limit, page=1) }}">Wyczysc</a>
       </form>
-      <div class="hint">Widok: {{ preset_label }} · Wyniki: {{ total_count }}</div>
+      <div class="actions">
+        <a
+          class="btn outline"
+          href="{{ url_for('index', search=search, preset=preset, sort=sort, order=order, export=1) }}"
+        >Eksport CSV</a>
+        <div class="hint">Widok: {{ preset_label }} · Wyniki: {{ total_count }}</div>
+      </div>
     </section>
 
     <section class="table-wrap">

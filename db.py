@@ -488,9 +488,10 @@ def get_products(
         SELECT *
         FROM ({query_base}) AS computed
         ORDER BY {order_clause}
-        LIMIT ? OFFSET ?
     """
-    params.extend([limit, offset])
+    if limit is not None:
+        query += "\n        LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
 
     conn = get_db(db_path)
     rows = conn.execute(query, tuple(params)).fetchall()

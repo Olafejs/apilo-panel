@@ -16,6 +16,16 @@ All important changes should be tracked here together with the application versi
 
 - Additional validation coverage for SMTP fields.
 
+## [1.0.28] - 2026-03-11
+
+### Added
+
+- Added CSV export for the product list with the current search, preset, and sorting applied.
+
+### Changed
+
+- The main inventory screen now exposes a direct `Eksport CSV` action and logs exports in the audit trail.
+
 ## [1.0.27] - 2026-03-11
 
 ### Added
