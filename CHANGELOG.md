@@ -16,6 +16,17 @@ All important changes should be tracked here together with the application versi
 
 - Additional validation coverage for SMTP fields.
 
+## [1.0.32] - 2026-03-11
+
+### Added
+
+- Added unit tests for sync runtime state, schedule calculation, and sync status payload labels.
+
+### Changed
+
+- Extracted sync runtime state, schedule helpers, and background thread bootstrap into `app_sync.py`.
+- Kept `app.py` on thin wrappers around the extracted sync runtime so existing routes and tests keep the same API.
+
 ## [1.0.31] - 2026-03-11
 
 ### Added
